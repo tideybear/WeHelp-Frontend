@@ -1,0 +1,1 @@
+import{n as m}from"./useFinanceListExpand-BopqPOWS.js";import{u as r}from"./index-B1Tg4bOi.js";function i(t,n){function e(o){const u=r(n);return m(()=>r(t),u)(o)}return{summaryMethod:e}}export{i as u};
