@@ -14,7 +14,8 @@ export const useUserStore = defineStore('user', () => {
     if (!res?.result) {
       throw new Error(res?.msg || '登录返回数据异常')
     }
-    userInfo.value = res.result
+    // 合并 token 到 userInfo
+    userInfo.value = { ...res.result }
     touchLastActivity()
   }
 

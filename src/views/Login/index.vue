@@ -44,7 +44,8 @@ const form = ref({
  */
 const rules = {
   account: [
-    { required: true, message: '用户名不能为空', trigger: 'blur' }
+    { required: true, message: '用户名不能为空', trigger: 'blur' },
+    { min: 2, max: 20, message: '用户名为2-20个字符', trigger: 'blur' }
   ],
   password: [
     { required: true, message: '密码不能为空', trigger: 'blur' },
@@ -117,7 +118,7 @@ function onPasswordEnter(e) {
     <header class="login-header">
       <div class="container m-top-20">
         <h1 class="logo">
-          <RouterLink to="/">YLDQ</RouterLink>
+          <RouterLink to="/">WEHELP</RouterLink>
         </h1>
         <RouterLink class="entry" to="/">
           <i class="iconfont icon-angle-right"></i>
@@ -187,14 +188,14 @@ function onPasswordEnter(e) {
     <!-- 页面底部 -->
     <footer class="login-footer">
       <div class="container">
-        <p>YLDQ</p>
+        <p></p>
       </div>
     </footer>
   </div>
 </template>
 
 <style scoped lang='scss'>
-/* 登录页头部 */
+/* 登录页头部 - 添加青绿色点缀 */
 .login-header {
   background: #fff;
   border-bottom: 1px solid #e4e4e4;
@@ -213,17 +214,9 @@ function onPasswordEnter(e) {
       height: 132px;
       width: 100%;
       text-indent: -9999px;
-      //background: url("@/assets/images/logo.png") no-repeat center 18px / contain;
+      // background: linear-gradient(135deg, #019899 0%, #017a7d 100%);
+      border-radius: 4px;
     }
-  }
-
-  .sub {
-    flex: 1;
-    font-size: 24px;
-    font-weight: normal;
-    margin-bottom: 38px;
-    margin-left: 20px;
-    color: #666;
   }
 
   .entry {
@@ -233,15 +226,17 @@ function onPasswordEnter(e) {
 
     i {
       font-size: 14px;
-      color: $xtxColor;
+      color: #019899;
       letter-spacing: -5px;
     }
   }
 }
 
-/* 登录区域 */
+/* 登录区域 - 添加渐变遮罩增强层次感 */
 .login-section {
-  background: url('@/assets/images/login-bg.png') no-repeat center / cover;
+  background:
+    linear-gradient(135deg, rgba(1, 152, 153, 0.85) 0%, rgba(1, 122, 125, 0.9) 100%),
+    url('@/assets/images/login-bg.jpeg') no-repeat center / cover;
   height: 488px;
   position: relative;
 
@@ -252,7 +247,12 @@ function onPasswordEnter(e) {
     left: 50%;
     top: 54px;
     transform: translate3d(100px, 0, 0);
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+    box-shadow:
+      0 4px 20px rgba(0, 0, 0, 0.15),
+      0 0 0 1px rgba(255, 255, 255, 0.1);
+    border-top: 4px solid #019899;
+    border-radius: 8px;
+    overflow: hidden;
 
     nav {
       font-size: 14px;
@@ -271,123 +271,123 @@ function onPasswordEnter(e) {
         font-size: 18px;
         position: relative;
         text-align: center;
+        color: #333;
+        font-weight: 500;
+
+        &::after {
+          content: '';
+          position: absolute;
+          bottom: -21px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 60px;
+          height: 3px;
+          background: #019899;
+          border-radius: 2px;
+        }
       }
     }
   }
 }
 
-/* 页面底部 */
+/* 页面底部 - 更精致的排版 */
 .login-footer {
   padding: 30px 0 50px;
   background: #fff;
+  border-top: 1px solid #f0f0f0;
 
   p {
     text-align: center;
     color: #999;
     padding-top: 20px;
+    font-size: 13px;
 
     a {
       line-height: 1;
       padding: 0 10px;
-      color: #999;
+      color: #666;
       display: inline-block;
+      transition: color 0.3s;
+
+      &:hover {
+        color: #019899;
+      }
 
       ~a {
-        border-left: 1px solid #ccc;
+        border-left: 1px solid #ddd;
       }
     }
   }
 }
 
-/* 表单样式 */
+/* 表单样式优化 */
 .account-box {
-  .toggle {
-    padding: 15px 40px;
-    text-align: right;
+  .form {
+    padding: 10px 20px 30px 20px;
 
-    a {
-      color: $xtxColor;
+    :deep(.el-input__wrapper) {
+      box-shadow: 0 0 0 1px #dcdfe6 inset;
+      transition: all 0.3s;
 
-      i {
-        font-size: 14px;
+      &:hover {
+        box-shadow: 0 0 0 1px #019899 inset;
+      }
+
+      &.is-focus {
+        box-shadow: 0 0 0 1px #019899 inset, 0 0 0 2px rgba(1, 152, 153, 0.1);
       }
     }
-  }
 
-  .form {
-    padding: 0 20px 20px 20px;
+    :deep(.el-input__inner) {
+      &::placeholder {
+        color: #bbb;
+      }
+    }
 
-    &-item {
-      margin-bottom: 28px;
-
-      .input {
-        position: relative;
-        height: 36px;
-
-        >i {
-          width: 34px;
-          height: 34px;
-          background: #cfcdcd;
-          color: #fff;
-          position: absolute;
-          left: 1px;
-          top: 1px;
-          text-align: center;
-          line-height: 34px;
-          font-size: 18px;
-        }
-
-        input {
-          padding-left: 44px;
-          border: 1px solid #cfcdcd;
-          height: 36px;
-          line-height: 36px;
-          width: 100%;
-
-          &.error {
-            border-color: $priceColor;
-          }
-
-          &.active,
-          &:focus {
-            border-color: $xtxColor;
-          }
-        }
-
-        .code {
-          position: absolute;
-          right: 1px;
-          top: 1px;
-          text-align: center;
-          line-height: 34px;
-          font-size: 14px;
-          background: #f5f5f5;
-          color: #666;
-          width: 90px;
-          height: 34px;
-          cursor: pointer;
-        }
+    :deep(.el-checkbox) {
+      .el-checkbox__input.is-checked .el-checkbox__inner {
+        background-color: #019899;
+        border-color: #019899;
       }
 
-      >.error {
-        position: absolute;
-        font-size: 12px;
-        line-height: 28px;
-        color: $priceColor;
+      .el-checkbox__inner:hover {
+        border-color: #019899;
+      }
 
-        i {
-          font-size: 14px;
-          margin-right: 2px;
-        }
+      .el-checkbox__input.is-checked + .el-checkbox__label {
+        color: #666;
       }
     }
   }
 }
 
-/* 登录按钮 */
+/* 登录按钮 - 增加交互效果 */
 .subBtn {
-  background: $xtxColor;
+  background: linear-gradient(135deg, #019899 0%, #017a7d 100%);
   width: 100%;
   color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(1, 152, 153, 0.3);
+
+  &:hover {
+    background: linear-gradient(135deg, #01a8aa 0%, #01898b 100%);
+    box-shadow: 0 4px 12px rgba(1, 152, 153, 0.4);
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(1, 152, 153, 0.3);
+  }
+
+  &:disabled {
+    background: #a0c9ca;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
 }
 </style>
