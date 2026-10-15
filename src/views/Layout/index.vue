@@ -1,6 +1,5 @@
 <script setup>
 import { defineOptions } from 'vue'
-import LayoutAside from './components/LayoutAside.vue'
 import LayoutHeader from './components/LayoutHeader.vue'
 import { useLayoutSidebarCollapse } from './composables/useLayoutSidebarCollapse'
 import { useLayoutNamespaceViews } from './composables/useLayoutNamespaceViews'
@@ -23,9 +22,6 @@ useLayoutNamespaceViews()
       />
     </el-header>
     <el-container class="layout-container">
-      <el-aside :style="{ width: asideWidth }">
-        <LayoutAside :isCollapse="isCollapse" />
-      </el-aside>
       <div class="content-box">
         <div class="content-wrapper">
           <el-main>

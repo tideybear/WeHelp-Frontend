@@ -73,8 +73,6 @@
   <header class='app-header'>
     <div class="header-container">
       <div class="collapse-btn">
-        <el-icon @click="handleCollapse" v-if="props.isCollapse"><Expand/></el-icon>
-        <el-icon @click="handleCollapse" v-else><Fold/></el-icon>
       </div>
       <div class="header-content">
         <el-row>
