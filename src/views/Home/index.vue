@@ -15,7 +15,7 @@ const modules = [
   { id: 10, meta: { icon: 'DataLine', title: '数据分析' }, remark: '数据统计报表' },
   { id: 11, meta: { icon: 'ChatDotRound', title: '消息中心' }, remark: '站内消息通知' },
   { id: 12, meta: { icon: 'Briefcase', title: '项目管理' }, remark: '项目进度跟踪' },
-  { id: 13, meta: { icon: 'PieChart', title: '可视化' }, remark: '数据可视化大屏' },
+  { id: 13, meta: { icon: 'PieChart', title: '可视化' }, remark: '数据可视化大屏' }
 ]
 
 const greeting = '上午好'
