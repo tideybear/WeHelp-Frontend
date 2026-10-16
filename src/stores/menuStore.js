@@ -1,13 +1,13 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { getAsideMenuAPI, getNamespaceMenuAPI } from '@/apis/menu'
+import { getMenuListAPI, getNamespaceMenuAPI } from '@/apis/menu'
 import { useUserStore } from '@/stores/userStore'
 import router from '@/router'
 
 export const useMenu = defineStore('Menu', () => {
   // 导航列表的数据管理
   // state 导航列表数据
-  const asideMenuList = ref([])
+  const menuList = ref([])
   const namespaceMenuList = ref([])
   //控制权限使用
   const namespaceMenuListId = ref([])
@@ -64,7 +64,7 @@ export const useMenu = defineStore('Menu', () => {
   /** 从 store 读取当前用户 id、currentNamespaceId；任一缺失则不请求接口（无默认值） */
   const getAsideMenu = async () => {
     if (await redirectToLoginIfNoUser()) {
-      asideMenuList.value = []
+      menuList.value = []
       return
     }
 
@@ -73,12 +73,12 @@ export const useMenu = defineStore('Menu', () => {
     const nsid = currentNamespaceId.value
 
     if (nsid == null || nsid === '' || uid == null || uid === '') {
-      asideMenuList.value = []
+      menuList.value = []
       return
     }
 
-    const res = await getAsideMenuAPI(Number(nsid), Number(uid))
-    asideMenuList.value = res.data
+    const res = await getMenuListAPI(Number(nsid), Number(uid))
+    menuList.value = res.data
   }
 
   const getNamespaceMenu = async () => {
@@ -115,7 +115,7 @@ export const useMenu = defineStore('Menu', () => {
     saveNamespaceId(id)
   }
   return {
-    asideMenuList,
+    menuList,
     namespaceMenuList,
     namespaceMenuListId,
     currentNamespaceId,
