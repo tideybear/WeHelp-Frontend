@@ -59,7 +59,7 @@ onMounted(async () => {
               :class="{ active: !currentParent }"
               @click="goBack"
             >
-              功能模块
+              首页
             </span>
             <template v-if="currentParent">
               <span class="breadcrumb-separator">/</span>
