@@ -7,6 +7,9 @@ import { useUserStore } from '@/stores/userStore'
 export const useMenu = defineStore('Menu', () => {
   // 导航列表的数据管理
   const menuList = ref([])
+  
+  // 当前查看的父模块
+  const currentParent = ref(null)
 
   // 获取菜单列表
   const getMenuList = async () => {
@@ -33,10 +36,12 @@ export const useMenu = defineStore('Menu', () => {
   // 清空菜单数据
   const clearMenuData = () => {
     menuList.value = []
+    currentParent.value = null
   }
 
   return {
     menuList,
+    currentParent,
     getMenuList,
     clearMenuData,
   }
