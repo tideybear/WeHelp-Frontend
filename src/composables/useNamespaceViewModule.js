@@ -1,5 +1,5 @@
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
-import { useMenu } from '@/stores/menuStore'
+import { useNamespace } from '@/stores/namespaceStore'
 import { useViewStore } from '@/stores/viewStore'
 import { loadNamespaceViewModule } from '@/utils/viewComponentResolver'
 
@@ -22,7 +22,7 @@ function buildModuleCacheKey(namespaceId, spec) {
  */
 export function useNamespaceViewModule(spec) {
   const viewStore = useViewStore()
-  const menuStore = useMenu()
+  const namespaceStore = useNamespace()
   const currentView = shallowRef(spec.defaultComponent ?? null)
   const viewMode = ref('default')
   const resolvedName = ref(null)
@@ -32,7 +32,7 @@ export function useNamespaceViewModule(spec) {
 
   /** 外层 component 仅随 namespace / 整包名变化而重建 */
   const viewInstanceKey = computed(() => {
-    const ns = menuStore.currentNamespaceId ?? ''
+    const ns = namespaceStore.currentNamespaceId ?? ''
     return `${ns}::${resolvedName.value ?? 'default'}`
   })
 
@@ -60,7 +60,7 @@ export function useNamespaceViewModule(spec) {
 
   async function reload(options = {}) {
     const { silent = false } = options
-    const namespaceId = menuStore.currentNamespaceId
+    const namespaceId = namespaceStore.currentNamespaceId
     const cached = readCache(namespaceId)
 
     if (cached) {
@@ -103,12 +103,12 @@ export function useNamespaceViewModule(spec) {
     () => viewStore.viewListLoaded,
     (loaded) => {
       if (loaded) void reload({ silent: true })
-      else if (!readCache(menuStore.currentNamespaceId)) ready.value = false
+      else if (!readCache(namespaceStore.currentNamespaceId)) ready.value = false
     },
   )
 
   watch(
-    () => menuStore.currentNamespaceId,
+    () => namespaceStore.currentNamespaceId,
     (newId, oldId) => {
       if (newId === oldId) return
       const cached = readCache(newId)

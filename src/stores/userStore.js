@@ -4,6 +4,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { loginAPI, getUserListAPI } from '@/apis/user.js'
 import { touchLastActivity, clearLastActivity } from '@/utils/sessionActivity'
+import { useNamespace } from '@/stores/namespaceStore'
+import { useMenu } from '@/stores/menuStore'
 
 export const useUserStore = defineStore('user', () => {
   const userInfo = ref({})
@@ -28,6 +30,9 @@ export const useUserStore = defineStore('user', () => {
     userInfo.value = {}
     userList.value = []
     clearLastActivity()
+    // 清空其他 store 数据
+    useNamespace().clearNamespaceData()
+    useMenu().clearMenuData()
   }
 
   return {

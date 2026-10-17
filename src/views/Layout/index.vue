@@ -1,25 +1,18 @@
 <script setup>
-import { defineOptions } from 'vue'
+import { defineOptions, onMounted } from 'vue'
 import LayoutHeader from './components/LayoutHeader.vue'
-import { useLayoutSidebarCollapse } from './composables/useLayoutSidebarCollapse'
-import { useLayoutNamespaceViews } from './composables/useLayoutNamespaceViews'
 
 defineOptions({
   name: 'LayoutIndex',
 })
 
-const { isCollapse, asideWidth, updateIsCollapse, updateAsideWidth } = useLayoutSidebarCollapse()
-useLayoutNamespaceViews()
+
 </script>
 
 <template>
   <el-container class="app-container">
     <el-header>
-      <LayoutHeader
-        :isCollapse="isCollapse"
-        @handleCollapse="updateIsCollapse"
-        @width-change="updateAsideWidth"
-      />
+      <LayoutHeader />
     </el-header>
     <el-container class="layout-container">
       <div class="content-box">

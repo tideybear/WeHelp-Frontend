@@ -1,15 +1,15 @@
 <script setup>
-import { useMenu } from '@/stores/menuStore'
+import { useNamespace } from '@/stores/namespaceStore'
 import customerListDefault from './List/index.vue'
 
 defineOptions({ name: 'CrmCustomerListPage' })
 
-const menuStore = useMenu()
+const namespaceStore = useNamespace()
 </script>
 
 <template>
   <div class="crm-list-container">
-    <customerListDefault :namespace-id="menuStore.currentNamespaceId" />
+    <customerListDefault :namespace-id="namespaceStore.currentNamespaceId" />
   </div>
 </template>
 

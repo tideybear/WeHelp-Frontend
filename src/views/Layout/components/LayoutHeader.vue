@@ -1,72 +1,59 @@
 <script setup>
-  import { computed, onMounted, ref } from 'vue'
-  import { useRouter } from 'vue-router'
-  import { ElMessage } from 'element-plus'
-  import { useMenu } from '@/stores/menuStore'
-  import { useUserStore } from '@/stores/userStore'
-  import { Expand, Fold, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { useNamespace } from '@/stores/namespaceStore'
+import { useUserStore } from '@/stores/userStore'
+import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 
-  const menuStore = useMenu()
-  const userStore = useUserStore()
-  const router = useRouter()
+const namespaceStore = useNamespace()
+const userStore = useUserStore()
+const router = useRouter()
 
-  const displayName = computed(() => userStore.userInfo?.account || '用户')
-  const avatarLetter = computed(() => {
-    const s = (displayName.value || '用').trim()
-    return s ? s.charAt(0).toUpperCase() : '用'
-  })
+const displayName = computed(() => userStore.userInfo?.account || '用户')
+const avatarLetter = computed(() => {
+  const s = (displayName.value || '用').trim()
+  return s ? s.charAt(0).toUpperCase() : '用'
+})
 
-  const handleUserCommand = async (cmd) => {
-    if (cmd === 'profile') {
-      ElMessage.info('个人信息页面开发中')
-      return
-    }
-    if (cmd === 'logout') {
-      userStore.clearUserInfo()
-      await router.replace('/login')
-    }
+const handleUserCommand = async (cmd) => {
+  if (cmd === 'profile') {
+    ElMessage.info('个人信息页面开发中')
+    return
   }
-  const isOpen = ref(false)
-  const namespaceName = ref('请选择项目')
-
-  const props = defineProps({
-    isCollapse: {
-      type: Boolean,
-      default: false
-    }
-  })
-
-
-  
-
-  const emit = defineEmits(['handleCollapse', 'width-change'])
-  const handleCollapse = () => {
-    emit('handleCollapse', !props.isCollapse)
-    emit('width-change', !props.isCollapse ? '64px' : '200px')
+  if (cmd === 'logout') {
+    userStore.clearUserInfo()
+    await router.replace('/login')
   }
+}
+const isOpen = ref(false)
 
+// 当前选中的命名空间名称
+const currentNamespaceName = computed(() => {
+  if (!namespaceStore.currentNamespaceId) return '请选择项目'
+  const list = namespaceStore.namespaceList || []
+  const current = list.find(p => p.id === namespaceStore.currentNamespaceId)
+  return current?.name || '请选择项目'
+})
 
+const selectnamespace = (namespace) => {
+  namespaceStore.setCurrentNamespaceId(namespace.id)
+  isOpen.value = !isOpen.value
+  // 切换 namespace 后跳转到首页
+  router.push('/')
+}
+const toggleDropdown = () => {
+  isOpen.value = !isOpen.value
+}
 
-  const selectnamespace= (namespace) => {
-    menuStore.setCurrentNamespaceId(namespace.id)
-    namespaceName.value = namespace.name
-    isOpen.value = !isOpen.value
+// 获取命名空间列表
+onMounted(async () => {
+  await namespaceStore.getNamespaceList()
+  // 确保设置了 currentNamespaceId 为第一个
+  if (!namespaceStore.currentNamespaceId && namespaceStore.namespaceList.length > 0) {
+    namespaceStore.setCurrentNamespaceId(namespaceStore.namespaceList[0].id)
   }
-  const toggleDropdown= () => {
-    isOpen.value = !isOpen.value
-  }
-  // 获取菜单数据
-  onMounted(async () => {
-    await menuStore.getNamespaceMenu()
-    // 根据 currentNamespaceId 找到对应的项目
-    const currentNamespace = menuStore.namespaceMenuList.find(p => p.id === menuStore.currentNamespaceId)
-    if (currentNamespace) {
-      namespaceName.value = currentNamespace.name
-    } else if (menuStore.namespaceMenuList.length > 0) {
-      // 如果找不到，使用第一个项目
-      namespaceName.value = menuStore.namespaceMenuList[0].name
-    }
-  })
+})
 </script>
 
 <template>
@@ -79,17 +66,17 @@
           <el-col :span="4">
             <div class="dropdown">
               <button @click="toggleDropdown" class="dropdown-toggle">
-                <div class="namespacespan">{{ namespaceName || '请选择' }}</div>
+                <div class="namespacespan">{{ currentNamespaceName }}</div>
                 <el-icon v-if="isOpen"><ArrowUp /></el-icon>
                 <el-icon v-else><ArrowDown /></el-icon>
               </button>
               <ul v-show="isOpen" class="dropdown-menu">
                 <li 
-                  v-for="namespace in menuStore.namespaceMenuList" 
+                  v-for="namespace in namespaceStore.namespaceList" 
                   :key="namespace.id"
                   :index="namespace.id.toString()"
                   @click="selectnamespace(namespace)"
-                  :class="{ 'selected': namespace.id === menuStore.currentNamespaceId }"
+                  :class="{ 'selected': namespace.id === namespaceStore.currentNamespaceId }"
                 >
                 {{ namespace.name }}
                 </li>
