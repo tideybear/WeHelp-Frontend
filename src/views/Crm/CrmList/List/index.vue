@@ -4,11 +4,10 @@ import { computed, onMounted, reactive, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
-import CopyableCell from '@/components/CopyableCell.vue'
-import PaginationBar from '@/components/PaginationBar.vue'
-import ListActions from '@/components/ListActions.vue'
-import { formatDateTime } from '@/utils/formatDate'
 import { useUserStore } from '@/stores/userStore'
+import { formatDateTime } from '@/utils/formatDate'
+import BreadcrumbNav from '@/views/Layout/components/BreadcrumbNav.vue'
+
 
 defineOptions({ name: 'CrmCustomerListDefault' })
 
@@ -140,15 +139,12 @@ async function fetchDataList(page = 1, size = 100) {
     loading.value = true
   }, LOADING_DELAY)
   try {
-    const res = await getCrmCustomerListAPI(page, size, buildFilterParams())
-    if (res?.code !== 200) {
-      ElMessage.error(res?.msg || '获取客户列表失败')
-      dataList.value = []
-      total.value = 0
-      return
-    }
-    dataList.value = Array.isArray(res.data) ? res.data : []
-    total.value = Number(res.total) >= 0 ? Number(res.total) : dataList.value.length
+    // 模拟数据测试
+    dataList.value = [
+      { id: 1, customer_code: 'C001', customer_name: '测试客户', contact_person: '张三', phone: '13800138000', status: 1, customer_level: 2 },
+      { id: 2, customer_code: 'C002', customer_name: '示例公司', contact_person: '李四', phone: '13900139000', status: 1, customer_level: 3 },
+    ]
+    total.value = 2
     await nextTick()
     tableRef.value?.setScrollTop?.(0)
   } catch (e) {
@@ -306,7 +302,9 @@ function resetCreateForm() {
   createForm.source = 1
   createForm.sales_person = ''
   createForm.remark = ''
-  createFormRef.value?.resetFields?.()
+  nextTick(() => {
+    createFormRef.value?.resetFields?.()
+  })
 }
 
 function openCreateCustomer() {
@@ -380,6 +378,9 @@ watch(
 <template>
   <div class="crm-customer-list-page">
     <div class="list-container">
+      <div class="page-header">
+        <BreadcrumbNav />
+      </div>
       <div class="filter-container">
         <div class="filter-row">
           <el-form class="filter-form" :inline="true" label-width="88px" @submit.prevent="handleSearch">
@@ -660,6 +661,10 @@ $toolbar-primary-dark-2: #337ecc;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.page-header {
+  margin-bottom: 16px;
 }
 
 .filter-container {

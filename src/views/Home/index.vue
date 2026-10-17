@@ -1,16 +1,18 @@
 <script setup>
-import { computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import ModuleGrid from './components/ModuleGrid.vue'
 import WelcomeBanner from './components/WelcomeBanner.vue'
 import ActivityPanel from './components/ActivityPanel.vue'
+import BreadcrumbNav from '../Layout/components/BreadcrumbNav.vue'
 import { useMenu } from '@/stores/menuStore'
-import { Fold } from '@element-plus/icons-vue'
+import { Loading } from '@element-plus/icons-vue'
 
 defineOptions({
   name: 'HomeIndex',
 })
 
+const route = useRoute()
 const router = useRouter()
 const menuStore = useMenu()
 
@@ -20,64 +22,71 @@ const currentModules = computed(() => menuStore.menuList || [])
 // 当前查看的父模块（用于返回）
 const currentParent = computed(() => menuStore.currentParent)
 
-// 切换到子模块
-function handleModuleClick(module) {
-  if (module.children && module.children.length > 0) {
-    // 有子模块，切换到子模块列表
-    menuStore.currentParent = module
-  } else {
-    // 无子模块，跳转到对应路由
-    router.push(module.path)
-  }
+// 加载状态
+const loading = computed(() => menuStore.loading)
+
+// 根据路由更新状态
+function updateByRoute() {
+  const path = route.path
+  menuStore.setCurrentByPath(path)
 }
 
-// 返回上级
-function goBack() {
-  menuStore.currentParent = null
+// 监听路由变化
+watch(
+  () => route.path,
+  () => {
+    updateByRoute()
+  }
+)
+
+// 点击模块
+function handleModuleClick(module) {
+  if (module.children && module.children.length > 0) {
+    // 有子模块，跳转到对应路由
+    router.push(module.path)
+  } else {
+    // 叶子节点，跳转到对应路由
+    router.push(module.path)
+  }
 }
 
 // 获取菜单列表
 onMounted(async () => {
   await menuStore.getMenuList()
+  updateByRoute()
 })
 </script>
 
 <template>
   <div class="home-container">
-    <!-- 欢迎横幅 -->
-    <WelcomeBanner />
-
-    <!-- 主内容区 -->
-    <div class="home-content">
-      <!-- 左侧模块列表 -->
-      <div class="module-section">
-        <div class="section-header">
-          <!-- 面包屑导航 -->
-          <div class="breadcrumb">
-            <span 
-              class="breadcrumb-item" 
-              :class="{ active: !currentParent }"
-              @click="goBack"
-            >
-              首页
-            </span>
-            <template v-if="currentParent">
-              <span class="breadcrumb-separator">/</span>
-              <span class="breadcrumb-item active">
-                {{ currentParent.meta?.title }}
-              </span>
-            </template>
-          </div>
-        </div>
-        <ModuleGrid 
-          :modules="currentParent ? currentParent.children : currentModules" 
-          @module-click="handleModuleClick" 
-        />
-      </div>
-
-      <!-- 右侧动态栏 -->
-      <ActivityPanel />
+    <!-- 加载状态 -->
+    <div v-if="loading" class="loading-container">
+      <el-icon class="loading-icon" :size="40"><Loading /></el-icon>
+      <span>加载中...</span>
     </div>
+
+    <template v-else>
+      <!-- 欢迎横幅 -->
+      <WelcomeBanner />
+
+      <!-- 主内容区 -->
+      <div class="home-content">
+        <!-- 左侧模块列表 -->
+        <div class="module-section">
+          <div class="section-header">
+            <!-- 面包屑导航 -->
+            <BreadcrumbNav />
+          </div>
+          <ModuleGrid 
+            :modules="currentParent ? currentParent.children : currentModules" 
+            @module-click="handleModuleClick" 
+          />
+        </div>
+
+        <!-- 右侧动态栏 -->
+        <ActivityPanel />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -86,6 +95,30 @@ onMounted(async () => {
   padding: 24px;
   min-height: calc(100vh - 120px);
   background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 16px;
+  color: #909399;
+  font-size: 16px;
+
+  .loading-icon {
+    animation: rotate 1s linear infinite;
+  }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .home-content {
@@ -105,37 +138,6 @@ onMounted(async () => {
     margin-bottom: 20px;
     padding-bottom: 16px;
     border-bottom: 1px solid #ebeef5;
-
-    .breadcrumb {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-
-      .breadcrumb-item {
-        font-size: 16px;
-        font-weight: 500;
-        color: #909399;
-        cursor: pointer;
-        padding: 6px 12px;
-        border-radius: 6px;
-        transition: all 0.3s;
-
-        &:not(.active):hover {
-          color: #019899;
-          background: #f0f9f9;
-        }
-
-        &.active {
-          color: #fff;
-          background: linear-gradient(135deg, #019899 0%, #017a7d 100%);
-        }
-      }
-
-      .breadcrumb-separator {
-        color: #c0c4cc;
-        font-size: 14px;
-      }
-    }
   }
 }
 </style>

@@ -5,6 +5,7 @@ import { touchLastActivity } from '@/utils/sessionActivity'
 import Layout from '@/views/Layout/index.vue'
 import Home from '@/views/Home/index.vue'
 import Login from '@/views/Login/index.vue'
+import CrmList from '@/views/Crm/CrmList/index.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -16,6 +17,7 @@ const router = createRouter({
       children: [
         { path: '/', name: 'home', component: Home },
         { path: '/crm', name: 'crm', component: Home },
+        { path: '/crm/list', name: 'customerList', component: CrmList },
       ],
     },
     { path: '/login', name: 'login', component: Login },

@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { getNamespaceListAPI } from '@/apis/namespace'
 import { useUserStore } from '@/stores/userStore'
+import { useMenu } from '@/stores/menuStore'
 import router from '@/router'
 
 export const useNamespace = defineStore('Namespace', () => {
@@ -96,6 +97,10 @@ export const useNamespace = defineStore('Namespace', () => {
   const setCurrentNamespaceId = (id) => {
     currentNamespaceId.value = id
     saveNamespaceId(id)
+    // 切换 namespace 后跳转到首页并刷新菜单数据
+    router.push('/')
+    const menuStore = useMenu()
+    menuStore.getMenuList()
   }
 
   // 清空命名空间数据

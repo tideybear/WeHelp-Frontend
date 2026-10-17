@@ -39,8 +39,6 @@ const currentNamespaceName = computed(() => {
 const selectnamespace = (namespace) => {
   namespaceStore.setCurrentNamespaceId(namespace.id)
   isOpen.value = !isOpen.value
-  // 切换 namespace 后跳转到首页
-  router.push('/')
 }
 const toggleDropdown = () => {
   isOpen.value = !isOpen.value
