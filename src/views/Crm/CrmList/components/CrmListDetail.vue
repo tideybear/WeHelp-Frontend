@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { getCrmCustomerDetailAPI, updateCrmCustomerAPI } from '@/apis/crm'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getCrmCustomerDetailAPI, updateCrmCustomerAPI, deleteCrmCustomerAPI } from '@/apis/crm'
 
 defineOptions({ name: 'CrmCustomerDetailDefault' })
 
@@ -12,8 +12,10 @@ const router = useRouter()
 const detailLoading = ref(false)
 const saving = ref(false)
 const detail = ref(null)
-const editing = ref(null)
-const editBuffer = ref('')
+const editBufferMap = ref({}) // 存储所有修改的字段
+
+// 是否有未保存的修改
+const hasModified = computed(() => Object.keys(editBufferMap.value).length > 0)
 
 const READONLY_FIELDS = ['id', 'created_at', 'updated_at']
 
@@ -24,6 +26,8 @@ const recordId = computed(() => {
 
 async function loadDetail() {
   if (!recordId.value) return
+  // 切换客户时清空编辑缓冲区
+  editBufferMap.value = {}
   detailLoading.value = true
   try {
     const res = await getCrmCustomerDetailAPI(recordId.value)
@@ -50,39 +54,94 @@ function isReadonly(field) {
 
 function startEdit(field, value) {
   if (isReadonly(field)) return
-  editing.value = field
-  editBuffer.value = value ?? ''
+  // 如果没有修改过，使用原始值初始化
+  if (editBufferMap.value[field] === undefined) {
+    editBufferMap.value[field] = value ?? ''
+  }
 }
 
-function cancelEdit() {
-  editing.value = null
-  editBuffer.value = ''
+function cancelEdit(field) {
+  delete editBufferMap.value[field]
 }
 
 function isEditing(field) {
-  return editing.value === field
+  return editBufferMap.value[field] !== undefined
 }
 
-async function saveField(field) {
+function getEditBuffer(field) {
+  return editBufferMap.value[field] ?? ''
+}
+
+function isFieldModified(field) {
+  return editBufferMap.value[field] !== undefined
+}
+
+// 获取字段值（优先使用编辑缓冲区的值，否则使用原始值）
+function getFieldValue(field) {
+  if (editBufferMap.value[field] !== undefined) {
+    return editBufferMap.value[field]
+  }
+  return detail.value?.[field]
+}
+
+// 保存所有编辑的字段
+async function handleSaveAll() {
   if (!recordId.value || !detail.value?.id) return
+  const modifiedFields = Object.keys(editBufferMap.value)
+  if (modifiedFields.length === 0) {
+    ElMessage.info('没有需要保存的修改')
+    return
+  }
   saving.value = true
   try {
-    const res = await updateCrmCustomerAPI({
-      id: Number(detail.value.id),
-      [field]: editBuffer.value,
+    // 构建更新数据（不包含 id，id 通过 URL 传递）
+    const updateData = {}
+    modifiedFields.forEach(field => {
+      updateData[field] = editBufferMap.value[field]
     })
-    if (res?.code !== 200) {
-      ElMessage.error(res?.msg || '保存失败')
+    const res = await updateCrmCustomerAPI(Number(detail.value.id), updateData)
+    if (!res?.result?.id) {
+      ElMessage.error('保存失败')
       return
     }
     ElMessage.success('保存成功')
-    detail.value[field] = editBuffer.value
-    editing.value = null
+    // 更新原始数据
+    modifiedFields.forEach(field => {
+      detail.value[field] = editBufferMap.value[field]
+    })
+    // 清空编辑缓冲区
+    editBufferMap.value = {}
   } catch (e) {
     console.error(e)
     ElMessage.error(e?.response?.data?.msg || '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+// 删除客户
+async function handleDelete() {
+  if (!recordId.value) return
+  try {
+    await ElMessageBox.confirm('确定要删除该客户吗？此操作不可恢复。', '删除确认', {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    const res = await deleteCrmCustomerAPI(Number(recordId.value))
+    if (!res?.result?.id) {
+      ElMessage.error('删除失败')
+      return
+    }
+    ElMessage.success('删除成功')
+    router.push({ name: 'customerList' })
+  } catch (e) {
+    console.error(e)
+    ElMessage.error(e?.response?.data?.msg || '删除失败')
   }
 }
 
@@ -107,18 +166,18 @@ watch(() => route.params.id, () => {
         <el-descriptions-item label="客户编号">{{ detail.customer_no || '—' }}</el-descriptions-item>
         <el-descriptions-item label="公司名称">
           <template v-if="isEditing('company_name')">
-            <el-input v-model="editBuffer" size="small" @keyup.enter="saveField('company_name')" @blur="cancelEdit" />
+            <el-input v-model="editBufferMap.company_name" size="small" />
           </template>
           <template v-else>
-            <span class="editable" @dblclick="startEdit('company_name', detail.company_name)">{{ detail.company_name || '—' }}</span>
+            <span class="editable" @dblclick="startEdit('company_name', detail.company_name)">{{ getFieldValue('company_name') || '—' }}</span>
           </template>
         </el-descriptions-item>
         <el-descriptions-item label="简称">
           <template v-if="isEditing('short_name')">
-            <el-input v-model="editBuffer" size="small" @keyup.enter="saveField('short_name')" @blur="cancelEdit" />
+            <el-input v-model="editBufferMap.short_name" size="small" />
           </template>
           <template v-else>
-            <span class="editable" @dblclick="startEdit('short_name', detail.short_name)">{{ detail.short_name || '—' }}</span>
+            <span class="editable" @dblclick="startEdit('short_name', detail.short_name)">{{ getFieldValue('short_name') || '—' }}</span>
           </template>
         </el-descriptions-item>
         <el-descriptions-item label="客户状态">
@@ -142,10 +201,10 @@ watch(() => route.params.id, () => {
         <el-descriptions-item label="三年潜力">{{ detail.third_year_sales_potential || '—' }}</el-descriptions-item>
         <el-descriptions-item label="网址">
           <template v-if="isEditing('website')">
-            <el-input v-model="editBuffer" size="small" @keyup.enter="saveField('website')" @blur="cancelEdit" />
+            <el-input v-model="editBufferMap.website" size="small" />
           </template>
           <template v-else>
-            <span class="editable" @dblclick="startEdit('website', detail.website)">{{ detail.website || '—' }}</span>
+            <span class="editable" @dblclick="startEdit('website', detail.website)">{{ getFieldValue('website') || '—' }}</span>
           </template>
         </el-descriptions-item>
         <el-descriptions-item label="是否跟进">{{ detail.is_followed_up_label || '—' }}</el-descriptions-item>
@@ -154,37 +213,43 @@ watch(() => route.params.id, () => {
         <el-descriptions-item label="更新时间">{{ detail.updated_at || '—' }}</el-descriptions-item>
         <el-descriptions-item label="基本信息" :span="2">
           <template v-if="isEditing('customer_basic_info')">
-            <el-input v-model="editBuffer" type="textarea" :rows="3" @blur="saveField('customer_basic_info')" />
+            <el-input v-model="editBufferMap.customer_basic_info" type="textarea" :rows="3" />
           </template>
           <template v-else>
-            <span class="editable editable-multiline" @dblclick="startEdit('customer_basic_info', detail.customer_basic_info)">{{ detail.customer_basic_info || '—' }}</span>
+            <span class="editable editable-multiline" @dblclick="startEdit('customer_basic_info', detail.customer_basic_info)">{{ getFieldValue('customer_basic_info') || '—' }}</span>
           </template>
         </el-descriptions-item>
         <el-descriptions-item label="客户需求" :span="2">
           <template v-if="isEditing('customer_needs')">
-            <el-input v-model="editBuffer" type="textarea" :rows="3" @blur="saveField('customer_needs')" />
+            <el-input v-model="editBufferMap.customer_needs" type="textarea" :rows="3" />
           </template>
           <template v-else>
-            <span class="editable editable-multiline" @dblclick="startEdit('customer_needs', detail.customer_needs)">{{ detail.customer_needs || '—' }}</span>
+            <span class="editable editable-multiline" @dblclick="startEdit('customer_needs', detail.customer_needs)">{{ getFieldValue('customer_needs') || '—' }}</span>
           </template>
         </el-descriptions-item>
         <el-descriptions-item label="跟进策略" :span="2">
           <template v-if="isEditing('follow_up_strategy')">
-            <el-input v-model="editBuffer" type="textarea" :rows="3" @blur="saveField('follow_up_strategy')" />
+            <el-input v-model="editBufferMap.follow_up_strategy" type="textarea" :rows="3" />
           </template>
           <template v-else>
-            <span class="editable editable-multiline" @dblclick="startEdit('follow_up_strategy', detail.follow_up_strategy)">{{ detail.follow_up_strategy || '—' }}</span>
+            <span class="editable editable-multiline" @dblclick="startEdit('follow_up_strategy', detail.follow_up_strategy)">{{ getFieldValue('follow_up_strategy') || '—' }}</span>
           </template>
         </el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">
           <template v-if="isEditing('remark')">
-            <el-input v-model="editBuffer" type="textarea" :rows="3" @blur="saveField('remark')" />
+            <el-input v-model="editBufferMap.remark" type="textarea" :rows="3" />
           </template>
           <template v-else>
-            <span class="editable editable-multiline" @dblclick="startEdit('remark', detail.remark)">{{ detail.remark || '—' }}</span>
+            <span class="editable editable-multiline" @dblclick="startEdit('remark', detail.remark)">{{ getFieldValue('remark') || '—' }}</span>
           </template>
         </el-descriptions-item>
       </el-descriptions>
+    </div>
+
+    <!-- 操作按钮区域 -->
+    <div class="detail-actions" v-if="detail">
+      <el-button type="primary" :loading="saving" @click="handleSaveAll" :disabled="!hasModified">保存</el-button>
+      <el-button type="danger" @click="handleDelete">删除</el-button>
     </div>
 
     <div v-else-if="!detailLoading" class="empty-state">暂无数据</div>
@@ -230,6 +295,15 @@ watch(() => route.params.id, () => {
   justify-content: center;
   color: var(--el-text-color-secondary);
   font-size: 14px;
+}
+
+.detail-actions {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .editable {

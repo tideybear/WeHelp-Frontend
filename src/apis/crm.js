@@ -27,19 +27,18 @@ export const createCrmCustomerAPI = (data) => {
 }
 
 /** 更新客户 */
-export const updateCrmCustomerAPI = (data) => {
+export const updateCrmCustomerAPI = (id, data) => {
   return request({
-    url: '/crm/customers/update',
-    method: 'POST',
+    url: `/crm/update/${id}`,
+    method: 'PUT',
     data,
   })
 }
 
 /** 删除客户 */
-export const deleteCrmCustomerAPI = (data) => {
+export const deleteCrmCustomerAPI = (id) => {
   return request({
-    url: '/crm/customers/delete',
-    method: 'POST',
-    data,
+    url: `/crm/delete/${id}`,
+    method: 'DELETE',
   })
 }
