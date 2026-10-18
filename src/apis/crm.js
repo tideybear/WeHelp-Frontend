@@ -6,13 +6,14 @@ const cleanParams = (params = {}) =>
   )
 
 /** 客户列表 */
-export const getCrmCustomerListAPI = (page = 1, page_size = 100, filters = {}) => {
+export const getCrmCustomerListAPI = (page = 1, page_size = 100, namespace_id, filters = {}) => {
   return request({
-    url: '/crm/customers/list',
+    url: '/crm/list',
     method: 'GET',
     params: cleanParams({
       page,
       page_size,
+      namespace_id,
       ...filters,
     }),
   })
