@@ -8,37 +8,36 @@ defineOptions({ name: 'BreadcrumbNav' })
 const router = useRouter()
 const menuStore = useMenu()
 
+// 从 store 获取面包屑数据
 const breadcrumbHistory = computed(() => menuStore.breadcrumbHistory)
 
-function handleClick(item) {
-  // 如果面包屑只有一个项（首页），点击首页不做任何操作
-  if (breadcrumbHistory.value.length === 1 && item.path === '/') {
+/**
+ * 处理面包屑项点击
+ * 逻辑规则：
+ * 1. 点击末项（当前页面）- 不做任何操作
+ * 2. 点击首页 - 导航到首页（路由变化后 store 会自动重置面包屑）
+ * 3. 点击其他项 - 导航到对应路由
+ */
+function handleClick(item, index) {
+  const isLastItem = index === breadcrumbHistory.value.length - 1
+
+  // 点击末项，不做任何操作
+  if (isLastItem) {
     return
   }
 
-  if (item.path === '/') {
-    // 只有面包屑有多项时才返回
-    if (breadcrumbHistory.value.length > 1) {
-      menuStore.goBackBreadcrumb()
-    }
-    router.push('/')
-  } else {
-    // 如果点击的不是最后一个，跳转到对应路由
-    const index = breadcrumbHistory.value.indexOf(item)
-    if (index < breadcrumbHistory.value.length - 1) {
-      router.push(item.path)
-    }
-  }
+  // 点击首页或其他项，导航到对应路由
+  router.push(item.path)
 }
 </script>
 
 <template>
   <div class="breadcrumb">
     <template v-for="(item, index) in breadcrumbHistory" :key="index">
-      <span 
-        class="breadcrumb-item" 
+      <span
+        class="breadcrumb-item"
         :class="{ active: index === breadcrumbHistory.length - 1 }"
-        @click="handleClick(item)"
+        @click="handleClick(item, index)"
       >
         {{ item.title }}
       </span>

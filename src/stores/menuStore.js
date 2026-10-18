@@ -112,22 +112,6 @@ export const useMenu = defineStore('Menu', () => {
     breadcrumbHistory.value = [{ title: '首页', path: '/' }]
   }
 
-  // 添加到面包屑历史
-  const addToBreadcrumb = (module) => {
-    breadcrumbHistory.value.push({
-      title: module.meta?.title,
-      path: module.path
-    })
-  }
-
-  // 返回上一级面包屑
-  const goBackBreadcrumb = () => {
-    // 保留首页，只移除首页之后的面包屑项
-    if (breadcrumbHistory.value.length > 1) {
-      breadcrumbHistory.value = breadcrumbHistory.value.slice(0, -1)
-    }
-  }
-
   return {
     menuList,
     currentParent,
@@ -138,7 +122,10 @@ export const useMenu = defineStore('Menu', () => {
     getParentModule,
     setCurrentByPath,
     clearMenuData,
-    addToBreadcrumb,
-    goBackBreadcrumb,
   }
+}, {
+  // 只持久化 breadcrumbHistory，menuList 从 API 重新获取
+  persist: {
+    paths: ['breadcrumbHistory'],
+  },
 })

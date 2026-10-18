@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/userStore'
 import { useNamespace } from '@/stores/namespaceStore'
+import { useMenu } from '@/stores/menuStore'
 import PaginationBar from '@/components/PaginationBar.vue'
 
 defineOptions({ name: 'CrmCustomerListPage' })
@@ -13,6 +14,7 @@ defineOptions({ name: 'CrmCustomerListPage' })
 const router = useRouter()
 const userStore = useUserStore()
 const namespaceStore = useNamespace()
+const menuStore = useMenu()
 
 const STATUS_OPTIONS = [
   { label: '潜在', value: 1 },

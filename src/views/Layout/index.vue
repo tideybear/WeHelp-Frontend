@@ -1,5 +1,5 @@
 <script setup>
-import { defineOptions, watch } from 'vue'
+import { defineOptions, watch, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import LayoutHeader from './components/LayoutHeader.vue'
 import BreadcrumbNav from './components/BreadcrumbNav.vue'
@@ -12,14 +12,25 @@ defineOptions({
 const route = useRoute()
 const menuStore = useMenu()
 
-// 监听路由变化，更新面包屑
+// 菜单是否已加载完成
+const menuLoaded = ref(false)
+
+// 监听路由变化，更新面包屑（仅在菜单加载完成后执行）
 watch(
   () => route.path,
   (path) => {
-    menuStore.setCurrentByPath(path)
-  },
-  { immediate: true }
+    if (menuLoaded.value) {
+      menuStore.setCurrentByPath(path)
+    }
+  }
 )
+
+// 加载菜单数据完成后，再设置面包屑
+onMounted(async () => {
+  await menuStore.getMenuList()
+  menuLoaded.value = true
+  menuStore.setCurrentByPath(route.path)
+})
 </script>
 
 <template>
