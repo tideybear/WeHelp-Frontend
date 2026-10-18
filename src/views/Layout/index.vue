@@ -1,12 +1,25 @@
 <script setup>
-import { defineOptions, onMounted } from 'vue'
+import { defineOptions, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import LayoutHeader from './components/LayoutHeader.vue'
+import BreadcrumbNav from './components/BreadcrumbNav.vue'
+import { useMenu } from '@/stores/menuStore'
 
 defineOptions({
   name: 'LayoutIndex',
 })
 
+const route = useRoute()
+const menuStore = useMenu()
 
+// 监听路由变化，更新面包屑
+watch(
+  () => route.path,
+  (path) => {
+    menuStore.setCurrentByPath(path)
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -15,6 +28,9 @@ defineOptions({
       <LayoutHeader />
     </el-header>
     <el-container class="layout-container">
+      <div class="breadcrumb-bar">
+        <BreadcrumbNav />
+      </div>
       <div class="content-box">
         <div class="content-wrapper">
           <el-main>
@@ -32,16 +48,24 @@ defineOptions({
   display: flex;
   flex-direction: column;
 }
+
+.breadcrumb-bar {
+  padding: 12px 20px;
+  background: #fff;
+  border-bottom: 1px solid #ebeef5;
+}
+
 .el-main {
   margin: 0;
   padding: 20px;
   height: 100%;
   overflow: auto;
 }
+
 .content-box {
   flex: 1;
   min-width: 0;
-  height: 100%;
+  height: calc(100% - 50px);
   display: flex;
 
   .content-wrapper {
@@ -59,24 +83,30 @@ defineOptions({
     }
   }
 }
+
 .el-aside {
   width: 200px;
   height: 100%;
   transition: width 0.3s ease-in-out;
 }
+
 .el-header {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 60px;
 }
+
 .el-footer {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 10px;
 }
+
 .layout-container {
   height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
 }
 </style>

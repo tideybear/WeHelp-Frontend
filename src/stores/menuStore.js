@@ -31,6 +31,20 @@ export const useMenu = defineStore('Menu', () => {
     return null
   }
 
+  // 根据路径获取父模块
+  const getParentModule = (path, list = menuList.value, parent = null) => {
+    for (const item of list) {
+      if (item.path === path) {
+        return parent
+      }
+      if (item.children?.length > 0) {
+        const found = getParentModule(path, item.children, item)
+        if (found !== null) return found
+      }
+    }
+    return null
+  }
+
   // 获取菜单列表
   const getMenuList = async () => {
     loading.value = true
@@ -72,11 +86,21 @@ export const useMenu = defineStore('Menu', () => {
           { title: module.meta?.title, path: module.path }
         ]
       } else if (module) {
-        // 叶子节点，跳转到对应路由
+        // 叶子节点，查找父模块并添加到面包屑
+        const parent = getParentModule(path)
         currentParent.value = null
-        breadcrumbHistory.value = [
-          { title: '首页', path: '/' }
-        ]
+        if (parent) {
+          breadcrumbHistory.value = [
+            { title: '首页', path: '/' },
+            { title: parent.meta?.title, path: parent.path },
+            { title: module.meta?.title, path: module.path }
+          ]
+        } else {
+          breadcrumbHistory.value = [
+            { title: '首页', path: '/' },
+            { title: module.meta?.title, path: module.path }
+          ]
+        }
       }
     }
   }
@@ -98,7 +122,10 @@ export const useMenu = defineStore('Menu', () => {
 
   // 返回上一级面包屑
   const goBackBreadcrumb = () => {
-    breadcrumbHistory.value = breadcrumbHistory.value.slice(0, -1)
+    // 保留首页，只移除首页之后的面包屑项
+    if (breadcrumbHistory.value.length > 1) {
+      breadcrumbHistory.value = breadcrumbHistory.value.slice(0, -1)
+    }
   }
 
   return {
@@ -108,6 +135,7 @@ export const useMenu = defineStore('Menu', () => {
     loading,
     getMenuList,
     getModuleByPath,
+    getParentModule,
     setCurrentByPath,
     clearMenuData,
     addToBreadcrumb,

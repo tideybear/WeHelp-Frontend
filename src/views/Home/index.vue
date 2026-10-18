@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import ModuleGrid from './components/ModuleGrid.vue'
 import WelcomeBanner from './components/WelcomeBanner.vue'
 import ActivityPanel from './components/ActivityPanel.vue'
-import BreadcrumbNav from '../Layout/components/BreadcrumbNav.vue'
 import { useMenu } from '@/stores/menuStore'
 import { Loading } from '@element-plus/icons-vue'
 
@@ -73,10 +72,6 @@ onMounted(async () => {
       <div class="home-content">
         <!-- 左侧模块列表 -->
         <div class="module-section">
-          <div class="section-header">
-            <!-- 面包屑导航 -->
-            <BreadcrumbNav />
-          </div>
           <ModuleGrid 
             :modules="currentParent ? currentParent.children : currentModules" 
             @module-click="handleModuleClick" 
@@ -133,11 +128,5 @@ onMounted(async () => {
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-
-  .section-header {
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #ebeef5;
-  }
 }
 </style>

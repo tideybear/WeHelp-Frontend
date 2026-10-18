@@ -6,7 +6,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/userStore'
 import { formatDateTime } from '@/utils/formatDate'
-import BreadcrumbNav from '@/views/Layout/components/BreadcrumbNav.vue'
 
 
 defineOptions({ name: 'CrmCustomerListDefault' })
@@ -26,12 +25,6 @@ const STATUS_OPTIONS = [
   { label: '禁用', value: 0 },
 ]
 
-const LEVEL_OPTIONS = [
-  { label: '普通', value: 1 },
-  { label: '重要', value: 2 },
-  { label: 'VIP', value: 3 },
-]
-
 const SOURCE_OPTIONS = [
   { label: '线上', value: 1 },
   { label: '线下', value: 2 },
@@ -39,19 +32,60 @@ const SOURCE_OPTIONS = [
   { label: '其他', value: 4 },
 ]
 
+const FOLLOWUP_STATUS_OPTIONS = [
+  { label: '待跟进', value: 1 },
+  { label: '跟进中', value: 2 },
+  { label: '已成交', value: 3 },
+  { label: '已放弃', value: 4 },
+]
+
+const YES_NO_OPTIONS = [
+  { label: '是', value: 1 },
+  { label: '否', value: 0 },
+]
+
+const CUSTOMER_TYPE_OPTIONS = [
+  { label: '潜在客户', value: 1 },
+  { label: '正式客户', value: 2 },
+  { label: 'VIP客户', value: 3 },
+  { label: '休眠客户', value: 4 },
+]
+
+const COMPANY_SIZE_OPTIONS = [
+  { label: '1-50人', value: 1 },
+  { label: '51-200人', value: 2 },
+  { label: '201-500人', value: 3 },
+  { label: '501-1000人', value: 4 },
+  { label: '1000人以上', value: 5 },
+]
+
 const columns = [
-  { prop: 'customer_code', label: '客户编码', minWidth: 120, showOverflowTooltip: true },
-  { prop: 'customer_name', label: '客户名称', minWidth: 160, showOverflowTooltip: true },
-  { prop: 'short_name', label: '简称', minWidth: 100, showOverflowTooltip: true },
-  { prop: 'contact_person', label: '联系人', minWidth: 96, showOverflowTooltip: true },
-  { prop: 'phone', label: '联系电话', minWidth: 120, showOverflowTooltip: true },
-  { prop: 'mobile', label: '手机', minWidth: 120, showOverflowTooltip: true },
-  { prop: 'status', label: '状态', minWidth: 88, showOverflowTooltip: false },
-  { prop: 'customer_level', label: '等级', minWidth: 96, showOverflowTooltip: false },
+  { prop: 'index', label: '序号', width: 70, showOverflowTooltip: false },
+  { prop: 'first_cooperation_date', label: '首次合作时间', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'first_followup_date', label: '首次跟进日期', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'is_followup', label: '是否跟进', minWidth: 100, showOverflowTooltip: false },
+  { prop: 'next_followup_time', label: '下次跟进时间', minWidth: 160, showOverflowTooltip: true },
   { prop: 'source', label: '来源', minWidth: 100, showOverflowTooltip: false },
-  { prop: 'region', label: '地区', minWidth: 140, showOverflowTooltip: true },
-  { prop: 'sales_person', label: '负责销售', minWidth: 100, showOverflowTooltip: true },
-  { prop: 'updated_at', label: '更新时间', minWidth: 168, showOverflowTooltip: false },
+  { prop: 'customer_name', label: '公司名称', minWidth: 160, showOverflowTooltip: true },
+  { prop: 'region', label: '区域', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'country', label: '国家', minWidth: 100, showOverflowTooltip: true },
+  { prop: 'customer_type', label: '客户性质', minWidth: 120, showOverflowTooltip: true },
+  { prop: 'industry', label: '行业', minWidth: 120, showOverflowTooltip: true },
+  { prop: 'company_size', label: '公司人数规模', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'company_revenue', label: '公司销售额', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'product', label: '产品', minWidth: 160, showOverflowTooltip: true },
+  { prop: 'followup_status', label: '跟进状态', minWidth: 120, showOverflowTooltip: false },
+  { prop: 'first_year_potential', label: '首年销售潜力', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'third_year_potential', label: '第三年销售潜力', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'contact_person', label: '客户对接人员', minWidth: 120, showOverflowTooltip: true },
+  { prop: 'phone', label: '联系电话', minWidth: 130, showOverflowTooltip: true },
+  { prop: 'email', label: '联系邮箱', minWidth: 180, showOverflowTooltip: true },
+  { prop: 'website', label: '网址', minWidth: 180, showOverflowTooltip: true },
+  { prop: 'customer_info', label: '客户基本信息', minWidth: 200, showOverflowTooltip: true },
+  { prop: 'customer_demand', label: '客户需求', minWidth: 200, showOverflowTooltip: true },
+  { prop: 'followup_strategy', label: '跟进策略', minWidth: 200, showOverflowTooltip: true },
+  { prop: 'followup_calendar', label: '跟进日历', minWidth: 160, showOverflowTooltip: true },
+  { prop: 'has_visited', label: '是否来访过', minWidth: 120, showOverflowTooltip: false },
 ]
 
 const dataList = ref([])
@@ -122,15 +156,70 @@ function sourceTagType(val) {
   return 'warning'
 }
 
-function formatRegion(row) {
-  const parts = [row?.province, row?.city, row?.district].map((x) => String(x ?? '').trim()).filter(Boolean)
-  return parts.length ? parts.join(' / ') : '—'
+function followupStatusLabel(val) {
+  const n = Number(val)
+  const hit = FOLLOWUP_STATUS_OPTIONS.find((o) => o.value === n)
+  return hit?.label ?? '—'
+}
+
+function followupStatusTagType(val) {
+  const n = Number(val)
+  if (n === 1) return 'info'
+  if (n === 2) return 'warning'
+  if (n === 3) return 'success'
+  return 'danger'
+}
+
+function yesNoLabel(val) {
+  const n = Number(val)
+  if (n === 1) return '是'
+  if (n === 0) return '否'
+  return '—'
+}
+
+function yesNoTagType(val) {
+  const n = Number(val)
+  return n === 1 ? 'success' : 'info'
+}
+
+function customerTypeLabel(val) {
+  const n = Number(val)
+  const hit = CUSTOMER_TYPE_OPTIONS.find((o) => o.value === n)
+  return hit?.label ?? '—'
+}
+
+function customerTypeTagType(val) {
+  const n = Number(val)
+  if (n === 3) return 'warning'
+  if (n === 2) return 'success'
+  return 'info'
+}
+
+function companySizeLabel(val) {
+  const n = Number(val)
+  const hit = COMPANY_SIZE_OPTIONS.find((o) => o.value === n)
+  return hit?.label ?? '—'
+}
+
+function formatDate(val) {
+  if (!val) return '—'
+  const date = new Date(val)
+  if (isNaN(date.getTime())) return '—'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 const displayList = computed(() =>
-  dataList.value.map((row) => ({
+  dataList.value.map((row, index) => ({
     ...row,
-    region: formatRegion(row),
+    index: index + 1 + (currentPage.value - 1) * pageSize.value,
+    region: [row?.province, row?.city, row?.district].map(x => String(x ?? '').trim()).filter(Boolean).join(' / ') || '—',
+    first_cooperation_date: formatDate(row?.first_cooperation_date),
+    first_followup_date: formatDate(row?.first_followup_date),
+    next_followup_time: formatDateTime(row?.next_followup_time),
+    followup_calendar: formatDateTime(row?.followup_calendar),
   })),
 )
 
@@ -141,8 +230,66 @@ async function fetchDataList(page = 1, size = 100) {
   try {
     // 模拟数据测试
     dataList.value = [
-      { id: 1, customer_code: 'C001', customer_name: '测试客户', contact_person: '张三', phone: '13800138000', status: 1, customer_level: 2 },
-      { id: 2, customer_code: 'C002', customer_name: '示例公司', contact_person: '李四', phone: '13900139000', status: 1, customer_level: 3 },
+      {
+        id: 1,
+        first_cooperation_date: '2025-03-15',
+        first_followup_date: '2025-03-10',
+        is_followup: 1,
+        next_followup_time: '2025-10-20 10:00:00',
+        source: 1,
+        customer_name: '北京科技有限公司',
+        province: '北京',
+        city: '北京市',
+        district: '朝阳区',
+        country: '中国',
+        customer_type: 2,
+        industry: '互联网',
+        company_size: 3,
+        company_revenue: '5000万',
+        product: 'CRM系统',
+        followup_status: 2,
+        first_year_potential: '100万',
+        third_year_potential: '300万',
+        contact_person: '张三',
+        phone: '010-12345678',
+        email: 'zhangsan@company.com',
+        website: 'https://www.example.com',
+        customer_info: '专注企业服务领域',
+        customer_demand: '需要完整的客户管理解决方案',
+        followup_strategy: '重点跟进，定期拜访',
+        followup_calendar: '2025-10-18 14:00:00',
+        has_visited: 1,
+      },
+      {
+        id: 2,
+        first_cooperation_date: '2025-06-20',
+        first_followup_date: '2025-06-18',
+        is_followup: 1,
+        next_followup_time: '2025-10-25 09:00:00',
+        source: 2,
+        customer_name: '上海贸易集团',
+        province: '上海',
+        city: '上海市',
+        district: '浦东新区',
+        country: '中国',
+        customer_type: 3,
+        industry: '贸易',
+        company_size: 4,
+        company_revenue: '2亿',
+        product: 'ERP系统',
+        followup_status: 1,
+        first_year_potential: '200万',
+        third_year_potential: '600万',
+        contact_person: '李四',
+        phone: '021-87654321',
+        email: 'lisi@shangmao.com',
+        website: 'https://www.shangmao.com',
+        customer_info: '大型贸易企业',
+        customer_demand: '整合供应链管理系统',
+        followup_strategy: '高层对接，定制方案',
+        followup_calendar: '2025-10-22 10:00:00',
+        has_visited: 0,
+      },
     ]
     total.value = 2
     await nextTick()
@@ -378,9 +525,6 @@ watch(
 <template>
   <div class="crm-customer-list-page">
     <div class="list-container">
-      <div class="page-header">
-        <BreadcrumbNav />
-      </div>
       <div class="filter-container">
         <div class="filter-row">
           <el-form class="filter-form" :inline="true" label-width="88px" @submit.prevent="handleSearch">
@@ -443,24 +587,45 @@ watch(
             :show-overflow-tooltip="col.showOverflowTooltip || false"
           >
             <template #default="scope">
-              <template v-if="col.prop === 'status'">
-                <el-tag size="small" :type="statusTagType(scope.row?.status)" effect="plain">
-                  {{ statusLabel(scope.row?.status) }}
-                </el-tag>
+              <!-- 序号 -->
+              <template v-if="col.prop === 'index'">
+                <span class="index-cell">{{ scope.row?.index }}</span>
               </template>
-              <template v-else-if="col.prop === 'customer_level'">
-                <el-tag size="small" :type="levelTagType(scope.row?.customer_level)" effect="plain">
-                  {{ levelLabel(scope.row?.customer_level) }}
-                </el-tag>
-              </template>
+              <!-- 来源 -->
               <template v-else-if="col.prop === 'source'">
                 <el-tag size="small" :type="sourceTagType(scope.row?.source)" effect="plain">
                   {{ sourceLabel(scope.row?.source) }}
                 </el-tag>
               </template>
-              <template v-else-if="col.prop === 'updated_at'">
-                <CopyableCell :value="formatDateTime(scope.row?.updated_at) || '—'" />
+              <!-- 是否跟进 -->
+              <template v-else-if="col.prop === 'is_followup'">
+                <el-tag size="small" :type="yesNoTagType(scope.row?.is_followup)" effect="plain">
+                  {{ yesNoLabel(scope.row?.is_followup) }}
+                </el-tag>
               </template>
+              <!-- 客户性质 -->
+              <template v-else-if="col.prop === 'customer_type'">
+                <el-tag size="small" :type="customerTypeTagType(scope.row?.customer_type)" effect="plain">
+                  {{ customerTypeLabel(scope.row?.customer_type) }}
+                </el-tag>
+              </template>
+              <!-- 公司人数规模 -->
+              <template v-else-if="col.prop === 'company_size'">
+                {{ companySizeLabel(scope.row?.company_size) }}
+              </template>
+              <!-- 跟进状态 -->
+              <template v-else-if="col.prop === 'followup_status'">
+                <el-tag size="small" :type="followupStatusTagType(scope.row?.followup_status)" effect="plain">
+                  {{ followupStatusLabel(scope.row?.followup_status) }}
+                </el-tag>
+              </template>
+              <!-- 是否来访过 -->
+              <template v-else-if="col.prop === 'has_visited'">
+                <el-tag size="small" :type="yesNoTagType(scope.row?.has_visited)" effect="plain">
+                  {{ yesNoLabel(scope.row?.has_visited) }}
+                </el-tag>
+              </template>
+              <!-- 其他文本列 -->
               <CopyableCell v-else :value="scope.row?.[col.prop]" />
             </template>
           </el-table-column>
@@ -770,6 +935,19 @@ $toolbar-primary-dark-2: #337ecc;
 .pagination-container {
   flex-shrink: 0;
   padding-top: 12px;
+}
+
+.index-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
 }
 
 .form-section-title {
