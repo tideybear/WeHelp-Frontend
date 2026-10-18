@@ -3,18 +3,17 @@ import { deleteCrmCustomerAPI, getCrmCustomerListAPI } from '@/apis/crm'
 import { computed, onMounted, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
 import { useNamespace } from '@/stores/namespaceStore'
 import { useMenu } from '@/stores/menuStore'
 import PaginationBar from '@/components/PaginationBar.vue'
-import CrmCreateCustomerDialog from './components/CrmCreateCustomerDialog.vue'
+import CrmFilterBar from './components/CrmFilterBar.vue'
 
 defineOptions({ name: 'CrmCustomerListPage' })
 
 const router = useRouter()
 const namespaceStore = useNamespace()
 const menuStore = useMenu()
-const createDialogRef = ref()
+const filterBarRef = ref()
 
 function getStatusTagType(status) {
   switch (status) {
@@ -79,22 +78,6 @@ const loading = ref(false)
 const LOADING_DELAY = 150
 let loadingTimer = null
 
-const filters = ref({
-  keyword: '',
-  customer_code: '',
-  customer_name: '',
-  contact_person: '',
-})
-
-function buildFilterParams() {
-  const out = {}
-  for (const [key, val] of Object.entries(filters.value)) {
-    const s = val === undefined || val === null ? '' : String(val).trim()
-    if (s !== '') out[key] = s
-  }
-  return out
-}
-
 const displayList = computed(() =>
   dataList.value.map((row, index) => ({
     ...row,
@@ -102,7 +85,7 @@ const displayList = computed(() =>
   })),
 )
 
-async function fetchDataList(page = 1, size = 100) {
+async function fetchDataList(page = 1, size = 100, filterParams = {}) {
   const ns = namespaceStore.currentNamespaceId
   if (ns == null || ns === '') {
     dataList.value = []
@@ -120,10 +103,9 @@ async function fetchDataList(page = 1, size = 100) {
       page,
       page_size: size,
       namespace_id: Number(ns),
-      ...buildFilterParams(),
+      ...filterParams,
     }
-    console.log('查询参数:', params)
-    
+
     const res = await getCrmCustomerListAPI(params)
     const result = res?.result ?? res
     dataList.value = result?.list ?? result?.data ?? []
@@ -143,20 +125,16 @@ async function fetchDataList(page = 1, size = 100) {
   }
 }
 
-function handleSearch() {
+// 处理搜索
+function handleSearch(filterParams) {
   currentPage.value = 1
-  fetchDataList(1, pageSize.value)
+  fetchDataList(1, pageSize.value, filterParams)
 }
 
+// 处理重置
 function handleResetFilters() {
-  filters.value = {
-    keyword: '',
-    customer_code: '',
-    customer_name: '',
-    contact_person: '',
-  }
   currentPage.value = 1
-  fetchDataList(1, pageSize.value)
+  fetchDataList(1, pageSize.value, {})
 }
 
 function handleSizeChange(val) {
@@ -255,7 +233,8 @@ watch(
   () => namespaceStore.currentNamespaceId,
   () => {
     currentPage.value = 1
-    fetchDataList(1, pageSize.value)
+    const filterParams = filterBarRef.value?.buildFilterParams?.() || {}
+    fetchDataList(1, pageSize.value, filterParams)
   },
 )
 </script>
@@ -263,37 +242,11 @@ watch(
 <template>
   <div class="crm-customer-list-page">
     <div class="list-container">
-      <div class="filter-container">
-        <div class="filter-row">
-          <el-form class="filter-form" :inline="true" label-width="88px" @submit.prevent="handleSearch">
-            <el-form-item label="关键词">
-              <el-input
-                v-model="filters.keyword"
-                placeholder="编码/名称/简称"
-                clearable
-                class="filter-input-wide"
-                :prefix-icon="Search"
-              />
-            </el-form-item>
-            <el-form-item label="客户编码">
-              <el-input v-model="filters.customer_code" placeholder="模糊搜索" clearable class="filter-input" />
-            </el-form-item>
-            <el-form-item label="客户名称">
-              <el-input v-model="filters.customer_name" placeholder="模糊搜索" clearable class="filter-input" />
-            </el-form-item>
-            <el-form-item label="联系人">
-              <el-input v-model="filters.contact_person" placeholder="模糊搜索" clearable class="filter-input" />
-            </el-form-item>
-          </el-form>
-          <div class="filter-toolbar">
-            <el-button type="primary" @click="handleSearch">查询</el-button>
-            <el-button @click="handleResetFilters">重置</el-button>
-          </div>
-          <div class="filter-toolbar-extra">
-            <CrmCreateCustomerDialog ref="createDialogRef" @success="handleCreateSuccess" />
-          </div>
-        </div>
-      </div>
+      <CrmFilterBar
+        ref="filterBarRef"
+        @search="handleSearch"
+        @reset="handleResetFilters"
+      />
 
       <div class="table-container">
         <el-table
