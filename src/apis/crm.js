@@ -1,21 +1,11 @@
 import request from '@/utils/http'
 
-const cleanParams = (params = {}) =>
-  Object.fromEntries(
-    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''),
-  )
-
 /** 客户列表 */
-export const getCrmCustomerListAPI = (page = 1, page_size = 100, namespace_id, filters = {}) => {
+export const getCrmCustomerListAPI = (params) => {
   return request({
     url: '/crm/list',
     method: 'GET',
-    params: cleanParams({
-      page,
-      page_size,
-      namespace_id,
-      ...filters,
-    }),
+    params,
   })
 }
 

@@ -1,39 +1,20 @@
 <script setup>
-import { createCrmCustomerAPI, deleteCrmCustomerAPI, getCrmCustomerListAPI } from '@/apis/crm'
-import { computed, onMounted, reactive, ref, nextTick, watch } from 'vue'
+import { deleteCrmCustomerAPI, getCrmCustomerListAPI } from '@/apis/crm'
+import { computed, onMounted, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search } from '@element-plus/icons-vue'
-import { useUserStore } from '@/stores/userStore'
+import { Search } from '@element-plus/icons-vue'
 import { useNamespace } from '@/stores/namespaceStore'
 import { useMenu } from '@/stores/menuStore'
 import PaginationBar from '@/components/PaginationBar.vue'
+import CrmCreateCustomerDialog from './components/CrmCreateCustomerDialog.vue'
 
 defineOptions({ name: 'CrmCustomerListPage' })
 
 const router = useRouter()
-const userStore = useUserStore()
 const namespaceStore = useNamespace()
 const menuStore = useMenu()
-
-const STATUS_OPTIONS = [
-  { label: '潜在', value: 1 },
-  { label: '跟进中', value: 2 },
-  { label: '已合作', value: 3 },
-]
-
-const SOURCE_OPTIONS = [
-  { label: '线上', value: 1 },
-  { label: '线下', value: 2 },
-  { label: '转介绍', value: 3 },
-  { label: '其他', value: 4 },
-]
-
-const LEVEL_OPTIONS = [
-  { label: '普通', value: 1 },
-  { label: '重要', value: 2 },
-  { label: 'VIP', value: 3 },
-]
+const createDialogRef = ref()
 
 function getStatusTagType(status) {
   switch (status) {
@@ -134,7 +115,16 @@ async function fetchDataList(page = 1, size = 100) {
   }, LOADING_DELAY)
 
   try {
-    const res = await getCrmCustomerListAPI(page, size, Number(ns), buildFilterParams())
+    // 构建查询参数
+    const params = {
+      page,
+      page_size: size,
+      namespace_id: Number(ns),
+      ...buildFilterParams(),
+    }
+    console.log('查询参数:', params)
+    
+    const res = await getCrmCustomerListAPI(params)
     const result = res?.result ?? res
     dataList.value = result?.list ?? result?.data ?? []
     total.value = result?.total ?? result?.count ?? dataList.value.length
@@ -251,108 +241,10 @@ async function deleteRow(index) {
   }
 }
 
-const createVisible = ref(false)
-const createFormRef = ref()
-const createSubmitting = ref(false)
-const createForm = reactive({
-  customer_name: '',
-  short_name: '',
-  contact_person: '',
-  phone: '',
-  mobile: '',
-  email: '',
-  province: '',
-  city: '',
-  district: '',
-  address: '',
-  status: 1,
-  customer_level: 1,
-  source: 1,
-  sales_person: '',
-  remark: '',
-})
-
-const createRules = {
-  customer_name: [
-    { required: true, message: '请输入客户名称', trigger: 'blur' },
-    { min: 1, max: 100, message: '长度在 1～100 个字符', trigger: 'blur' },
-  ],
-}
-
-function resetCreateForm() {
-  createForm.customer_name = ''
-  createForm.short_name = ''
-  createForm.contact_person = ''
-  createForm.phone = ''
-  createForm.mobile = ''
-  createForm.email = ''
-  createForm.province = ''
-  createForm.city = ''
-  createForm.district = ''
-  createForm.address = ''
-  createForm.status = 1
-  createForm.customer_level = 1
-  createForm.source = 1
-  createForm.sales_person = ''
-  createForm.remark = ''
-  nextTick(() => {
-    createFormRef.value?.resetFields?.()
-  })
-}
-
-function openCreateCustomer() {
-  resetCreateForm()
-  createVisible.value = true
-}
-
-async function submitCreateCustomer() {
-  await createFormRef.value?.validate?.().catch(() => Promise.reject())
-  const uid = userStore.userInfo?.id
-  if (uid == null || uid === '') {
-    ElMessage.warning('请先登录')
-    return
-  }
-  const ns = namespaceStore.currentNamespaceId
-  if (ns == null || ns === '') {
-    ElMessage.warning('请先选择项目空间')
-    return
-  }
-  createSubmitting.value = true
-  try {
-    const payload = {
-      user_id: Number(uid),
-      namespace_id: Number(ns),
-      customer_name: createForm.customer_name.trim(),
-      short_name: createForm.short_name.trim(),
-      contact_person: createForm.contact_person.trim(),
-      phone: createForm.phone.trim(),
-      mobile: createForm.mobile.trim(),
-      email: createForm.email.trim(),
-      province: createForm.province.trim(),
-      city: createForm.city.trim(),
-      district: createForm.district.trim(),
-      address: createForm.address.trim(),
-      status: createForm.status,
-      customer_level: createForm.customer_level,
-      source: createForm.source,
-      sales_person: createForm.sales_person.trim(),
-      remark: createForm.remark.trim(),
-    }
-    const res = await createCrmCustomerAPI(payload)
-    if (res?.code !== 200) {
-      ElMessage.warning(res?.msg || '新增失败')
-      return
-    }
-    const code = res?.data?.customer_code
-    ElMessage.success(code ? `新增成功，客户编码：${code}` : '新增成功')
-    createVisible.value = false
-    currentPage.value = 1
-    await fetchDataList(1, pageSize.value)
-  } catch (e) {
-    console.error('新增客户失败:', e)
-  } finally {
-    createSubmitting.value = false
-  }
+// 新增客户成功后的回调
+function handleCreateSuccess() {
+  currentPage.value = 1
+  fetchDataList(1, pageSize.value)
 }
 
 onMounted(() => {
@@ -398,15 +290,7 @@ watch(
             <el-button @click="handleResetFilters">重置</el-button>
           </div>
           <div class="filter-toolbar-extra">
-            <el-tooltip content="新增客户" placement="top">
-              <el-button
-                type="primary"
-                :icon="Plus"
-                circle
-                aria-label="新增客户"
-                @click="openCreateCustomer"
-              />
-            </el-tooltip>
+            <CrmCreateCustomerDialog ref="createDialogRef" @success="handleCreateSuccess" />
           </div>
         </div>
       </div>
@@ -456,11 +340,9 @@ watch(
               {{ scope.row?.[col.prop] ?? '—' }}
             </template>
           </el-table-column>
-          <el-table-column fixed="right" label="操作" width="120">
+          <el-table-column fixed="right" label="操作" width="80">
             <template #default="scope">
-              <el-button link type="primary" size="small" @click="viewRow(scope.$index)">查看</el-button>
-              <el-button link type="primary" size="small" @click="editRow(scope.$index)">编辑</el-button>
-              <el-button link type="danger" size="small" @click="deleteRow(scope.$index)">删除</el-button>
+              <el-button link type="primary" size="small" @click="viewRow(scope.$index)">详情</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -477,149 +359,6 @@ watch(
         />
       </div>
     </div>
-
-    <el-dialog
-      v-model="createVisible"
-      class="customer-create-dialog"
-      title="新增客户"
-      width="720px"
-      destroy-on-close
-      append-to-body
-      @closed="resetCreateForm"
-    >
-      <el-form
-        ref="createFormRef"
-        :model="createForm"
-        :rules="createRules"
-        label-width="96px"
-        class="customer-create-form"
-        @submit.prevent
-      >
-        <div class="form-section-title">基本信息</div>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="客户名称" prop="customer_name">
-              <el-input
-                v-model="createForm.customer_name"
-                clearable
-                placeholder="请输入客户名称"
-                maxlength="100"
-                show-word-limit
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="简称">
-              <el-input v-model="createForm.short_name" clearable placeholder="选填" maxlength="100" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="状态">
-              <el-select v-model="createForm.status" placeholder="请选择状态" class="form-field-full">
-                <el-option
-                  v-for="opt in STATUS_OPTIONS"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="等级">
-              <el-select v-model="createForm.customer_level" placeholder="请选择等级" class="form-field-full">
-                <el-option
-                  v-for="opt in LEVEL_OPTIONS"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="客户来源">
-              <el-select v-model="createForm.source" placeholder="请选择来源" class="form-field-full">
-                <el-option
-                  v-for="opt in SOURCE_OPTIONS"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="负责销售">
-              <el-input v-model="createForm.sales_person" clearable placeholder="选填" maxlength="50" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <div class="form-section-title">联系信息</div>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="联系人">
-              <el-input v-model="createForm.contact_person" clearable placeholder="选填" maxlength="50" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="联系电话">
-              <el-input v-model="createForm.phone" clearable placeholder="选填" maxlength="30" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="手机">
-              <el-input v-model="createForm.mobile" clearable placeholder="选填" maxlength="30" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="邮箱">
-              <el-input v-model="createForm.email" clearable placeholder="选填" maxlength="100" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <div class="form-section-title">地址信息</div>
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item label="省">
-              <el-input v-model="createForm.province" clearable placeholder="选填" maxlength="50" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="市">
-              <el-input v-model="createForm.city" clearable placeholder="选填" maxlength="50" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="区">
-              <el-input v-model="createForm.district" clearable placeholder="选填" maxlength="50" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="24">
-            <el-form-item label="详细地址">
-              <el-input v-model="createForm.address" clearable placeholder="选填" maxlength="255" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item label="备注">
-          <el-input
-            v-model="createForm.remark"
-            type="textarea"
-            :rows="3"
-            placeholder="选填"
-            maxlength="500"
-            show-word-limit
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="createSubmitting" @click="submitCreateCustomer">确定</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 

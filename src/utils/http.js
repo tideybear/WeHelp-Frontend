@@ -18,6 +18,12 @@ httpInstance.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // 清理空参数
+  if (config.params) {
+    config.params = Object.fromEntries(
+      Object.entries(config.params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+    )
+  }
   return config
 }, (e) => Promise.reject(e))
 
