@@ -1,10 +1,8 @@
 <script setup>
-import { deleteCrmCustomerAPI, getCrmCustomerListAPI } from '@/apis/crm'
+import { getCrmCustomerListAPI } from '@/apis/crm'
 import { computed, onMounted, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNamespace } from '@/stores/namespaceStore'
-import { useMenu } from '@/stores/menuStore'
 import PaginationBar from '@/components/PaginationBar.vue'
 import CrmFilterBar from './components/CrmFilterBar.vue'
 
@@ -12,7 +10,6 @@ defineOptions({ name: 'CrmCustomerListPage' })
 
 const router = useRouter()
 const namespaceStore = useNamespace()
-const menuStore = useMenu()
 const filterBarRef = ref()
 
 function getStatusTagType(status) {
@@ -152,77 +149,12 @@ function viewRow(index) {
   const row = dataList.value[index]
   if (!row?.id) return
   router.push({
-    name: 'CrmCustomerDetail',
+    name: 'customerDetail',
     params: { id: String(row.id) },
-    query: {
-      rowData: encodeURIComponent(JSON.stringify(row)),
-      ...(namespaceStore.currentNamespaceId != null && namespaceStore.currentNamespaceId !== ''
-        ? { namespace_id: String(namespaceStore.currentNamespaceId) }
-        : {}),
-    },
+    query: namespaceStore.currentNamespaceId
+      ? { namespace_id: String(namespaceStore.currentNamespaceId) }
+      : {},
   })
-}
-
-function editRow(index) {
-  viewRow(index)
-}
-
-async function deleteRow(index) {
-  const rowIndex = Number(index)
-  if (Number.isNaN(rowIndex) || rowIndex < 0 || rowIndex >= dataList.value.length) return
-
-  try {
-    await ElMessageBox.confirm('确认删除该客户？删除后不可恢复。', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-  } catch {
-    ElMessage.info('已取消删除')
-    return
-  }
-
-  const currentRow = dataList.value[rowIndex]
-  const recordId = currentRow?.id
-  if (recordId == null || recordId === '') {
-    ElMessage.error('缺少记录 id，无法删除')
-    return
-  }
-
-  const ns = namespaceStore.currentNamespaceId
-  if (ns == null || ns === '') {
-    ElMessage.warning('请先选择项目空间')
-    return
-  }
-
-  try {
-    const res = await deleteCrmCustomerAPI({
-      id: recordId,
-      namespace_id: Number(ns),
-    })
-    if (res?.code !== 200) {
-      ElMessage.error(res?.msg || '删除失败')
-      return
-    }
-    ElMessage.success(res?.msg || '删除成功')
-    dataList.value.splice(rowIndex, 1)
-    total.value = Math.max(0, total.value - 1)
-    if (dataList.value.length === 0 && total.value > 0) {
-      await fetchDataList(currentPage.value, pageSize.value)
-    } else if (dataList.value.length === 0 && currentPage.value > 1) {
-      currentPage.value -= 1
-      await fetchDataList(currentPage.value, pageSize.value)
-    }
-  } catch (e) {
-    console.error('删除客户失败:', e)
-    ElMessage.error(e?.response?.data?.msg || '删除失败')
-  }
-}
-
-// 新增客户成功后的回调
-function handleCreateSuccess() {
-  currentPage.value = 1
-  fetchDataList(1, pageSize.value)
 }
 
 onMounted(() => {
@@ -316,14 +248,6 @@ watch(
 </template>
 
 <style scoped lang="scss">
-$toolbar-primary: #409eff;
-$toolbar-primary-light-3: #79bbff;
-$toolbar-primary-light-5: #a0cfff;
-$toolbar-primary-light-7: #c6e2ff;
-$toolbar-primary-light-8: #d9ecff;
-$toolbar-primary-light-9: #ecf5ff;
-$toolbar-primary-dark-2: #337ecc;
-
 .crm-customer-list-page {
   display: flex;
   flex-direction: column;
@@ -339,75 +263,6 @@ $toolbar-primary-dark-2: #337ecc;
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.page-header {
-  margin-bottom: 16px;
-}
-
-.filter-container {
-  flex-shrink: 0;
-  margin-bottom: 16px;
-  padding: 16px 20px 6px;
-  background-color: #ffffff;
-  border-radius: 8px;
-  border: 1px solid var(--el-border-color-lighter);
-  --el-color-primary: #{$toolbar-primary};
-  --el-color-primary-light-3: #{$toolbar-primary-light-3};
-  --el-color-primary-light-5: #{$toolbar-primary-light-5};
-  --el-color-primary-light-7: #{$toolbar-primary-light-7};
-  --el-color-primary-light-8: #{$toolbar-primary-light-8};
-  --el-color-primary-light-9: #{$toolbar-primary-light-9};
-  --el-color-primary-dark-2: #{$toolbar-primary-dark-2};
-}
-
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 16px;
-}
-
-.filter-form {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0 8px;
-
-  :deep(.el-form-item) {
-    margin-bottom: 18px;
-    margin-right: 0;
-  }
-
-  :deep(.el-form-item__label) {
-    font-size: 13px;
-    color: var(--el-text-color-regular);
-    padding-right: 8px;
-  }
-}
-
-.filter-toolbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.filter-toolbar-extra {
-  flex-shrink: 0;
-  margin-left: auto;
-  margin-bottom: 18px;
-}
-
-.filter-input {
-  width: 148px;
-}
-
-.filter-input-wide {
-  width: 240px;
 }
 
 .table-container {
@@ -469,52 +324,5 @@ $toolbar-primary-dark-2: #337ecc;
 .pagination-container {
   flex-shrink: 0;
   padding-top: 12px;
-}
-
-.index-cell {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: #f5f7fa;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #606266;
-}
-
-.form-section-title {
-  margin: 4px 0 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  line-height: 1.4;
-
-  &:not(:first-child) {
-    margin-top: 16px;
-  }
-}
-
-.form-field-full {
-  width: 100%;
-}
-
-.customer-create-form {
-  max-height: 60vh;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-</style>
-
-<style lang="scss">
-.customer-create-dialog.el-dialog {
-  --el-color-primary: #409eff;
-  --el-color-primary-light-3: #79bbff;
-  --el-color-primary-light-5: #a0cfff;
-  --el-color-primary-light-7: #c6e2ff;
-  --el-color-primary-light-8: #d9ecff;
-  --el-color-primary-light-9: #ecf5ff;
-  --el-color-primary-dark-2: #337ecc;
 }
 </style>

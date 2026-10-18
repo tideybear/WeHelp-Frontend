@@ -18,12 +18,8 @@ const router = createRouter({
       children: [
         { path: '/', name: 'home', component: Home },
         { path: '/crm', name: 'crm', component: Home },
-        { path: '/crm/list', name: 'customerList', component: CrmList,
-          children: [
-            { path: '/crm/list/detail/:id', name: 'customerDetail', component: CrmDetail },
-          ],
-
-         },
+        { path: '/crm/list', name: 'customerList', component: CrmList },
+        { path: '/crm/list/detail/:id', name: 'customerDetail', component: CrmDetail },
       ],
     },
     { path: '/login', name: 'login', component: Login },

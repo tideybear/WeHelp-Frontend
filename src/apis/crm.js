@@ -12,9 +12,8 @@ export const getCrmCustomerListAPI = (params) => {
 /** 客户详情 */
 export const getCrmCustomerDetailAPI = (id) => {
   return request({
-    url: '/crm/customers/detail',
+    url: `/crm/detail/${id}`,
     method: 'GET',
-    params: { id },
   })
 }
 
