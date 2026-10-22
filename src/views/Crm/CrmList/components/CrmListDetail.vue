@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCrmCustomerDetailAPI, updateCrmCustomerAPI, deleteCrmCustomerAPI } from '@/apis/crm'
+import CrmCustomerContacts from './CrmCustomerContacts.vue'
 
 defineOptions({ name: 'CrmCustomerDetailDefault' })
 
@@ -245,6 +246,18 @@ watch(() => route.params.id, () => {
         </el-descriptions-item>
       </el-descriptions>
     </div>
+    <el-row :gutter="16" class="detail-modules">
+      <el-col :span="12">
+        <CrmCustomerContacts
+          v-if="detail?.id"
+          :customer-id="detail.id"
+          :namespace-id="route.query.namespace_id"
+        />
+      </el-col>
+      <el-col :span="12">
+        <div class="module-placeholder">背景调查</div>
+      </el-col>
+    </el-row>
 
     <!-- 操作按钮区域 -->
     <div class="detail-actions" v-if="detail">
@@ -258,12 +271,9 @@ watch(() => route.params.id, () => {
 
 <style scoped lang="scss">
 .detail-page {
-  height: 100%;
-  min-height: 0;
   background: #fff;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .detail-header {
@@ -282,19 +292,28 @@ watch(() => route.params.id, () => {
 }
 
 .detail-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   padding: 16px;
 }
 
 .empty-state {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 60px 0;
   color: var(--el-text-color-secondary);
   font-size: 14px;
+}
+
+.detail-modules {
+  flex-shrink: 0;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.module-placeholder {
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 
 .detail-actions {

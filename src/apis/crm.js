@@ -42,3 +42,38 @@ export const deleteCrmCustomerAPI = (id) => {
     method: 'DELETE',
   })
 }
+
+/**客户兰联系人列表 */
+export const getCrmCustomerContactListAPI = (params) => {
+  return request({
+    url: '/crm/contacts',
+    method: 'GET',
+    params,
+  })
+}
+
+/** 新增客户联系人 */
+export const createCrmCustomerContactAPI = (data) => {
+  return request({
+    url: '/crm/contacts/create',
+    method: 'POST',
+    data,
+  })
+}
+
+/** 更新客户联系人 */
+export const updateCrmCustomerContactAPI = (id, data) => {
+  return request({
+    url: `/crm/contacts/update/${id}`,
+    method: 'PUT',
+    data,
+  })
+}
+
+/** 删除客户联系人 */
+export const deleteCrmCustomerContactAPI = (id) => {
+  return request({
+    url: `/crm/contacts/delete/${id}`, 
+    method: 'DELETE',
+  })
+}
