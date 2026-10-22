@@ -52,6 +52,7 @@ export const getCrmCustomerContactListAPI = (params) => {
   })
 }
 
+
 /** 新增客户联系人 */
 export const createCrmCustomerContactAPI = (data) => {
   return request({
@@ -74,6 +75,41 @@ export const updateCrmCustomerContactAPI = (id, data) => {
 export const deleteCrmCustomerContactAPI = (id) => {
   return request({
     url: `/crm/contacts/delete/${id}`, 
+    method: 'DELETE',
+  })
+}
+
+/**客户跟进记录列表 */
+export const getCrmCustomerFollowUpRecordAPI = (params) => {
+  return request({
+    url: '/crm/follow-up-records',
+    method: 'GET',
+    params,
+  })
+}
+
+/** 新增客户跟进记录 */
+export const createCrmFollowUpRecordAPI = (data) => {
+  return request({
+    url: '/crm/follow-up-records/create',
+    method: 'POST',
+    data,
+  })
+}
+
+/** 更新客户跟进记录 */
+export const updateCrmFollowUpRecordAPI = (id, data) => {
+  return request({
+    url: `/crm/follow-up-records/update/${id}`,
+    method: 'PUT',
+    data,
+  })
+}
+
+/** 删除客户跟进记录 */
+export const deleteCrmFollowUpRecordAPI = (id) => {
+  return request({
+    url: `/crm/follow-up-records/delete/${id}`,
     method: 'DELETE',
   })
 }

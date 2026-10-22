@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCrmCustomerDetailAPI, updateCrmCustomerAPI, deleteCrmCustomerAPI } from '@/apis/crm'
 import CrmCustomerContacts from './CrmCustomerContacts.vue'
+import CrmFollowUpRecords from './CrmFollowUpRecords.vue'
 
 defineOptions({ name: 'CrmCustomerDetailDefault' })
 
@@ -252,6 +253,11 @@ watch(() => route.params.id, () => {
           v-if="detail?.id"
           :customer-id="detail.id"
           :namespace-id="route.query.namespace_id"
+        />
+        <CrmFollowUpRecords
+          v-if="detail?.id"
+          :customer-id="detail.id"
+          @refresh="loadDetail"
         />
       </el-col>
       <el-col :span="12">

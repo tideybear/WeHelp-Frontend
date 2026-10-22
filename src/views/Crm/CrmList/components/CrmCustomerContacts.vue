@@ -247,9 +247,9 @@ watch(
         </template>
       </el-table-column>
 
-      <el-table-column label="性别" width="70" align="center">
+      <!-- <el-table-column label="性别" width="70" align="center">
         <template #default="{ row }">{{ genderLabel(row.gender) }}</template>
-      </el-table-column>
+      </el-table-column> -->
 
       <el-table-column label="职位" min-width="110" show-overflow-tooltip>
         <template #default="{ row }">{{ cellText(row, 'title') }}</template>
@@ -259,9 +259,9 @@ watch(
         <template #default="{ row }">{{ cellText(row, 'department') }}</template>
       </el-table-column>
 
-      <el-table-column label="联系电话" min-width="120" show-overflow-tooltip>
+      <!-- <el-table-column label="联系电话" min-width="120" show-overflow-tooltip>
         <template #default="{ row }">{{ cellText(row, 'phone') }}</template>
-      </el-table-column>
+      </el-table-column> -->
 
       <el-table-column label="手机" min-width="120" show-overflow-tooltip>
         <template #default="{ row }">{{ cellText(row, 'mobile') }}</template>
@@ -271,7 +271,7 @@ watch(
         <template #default="{ row }">{{ cellText(row, 'email') }}</template>
       </el-table-column>
 
-      <el-table-column label="微信" min-width="110" show-overflow-tooltip>
+      <!-- <el-table-column label="微信" min-width="110" show-overflow-tooltip>
         <template #default="{ row }">{{ cellText(row, 'wechat') }}</template>
       </el-table-column>
 
@@ -289,7 +289,7 @@ watch(
 
       <el-table-column label="备注" min-width="140" show-overflow-tooltip>
         <template #default="{ row }">{{ cellText(row, 'notes') }}</template>
-      </el-table-column>
+      </el-table-column> -->
 
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
