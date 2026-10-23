@@ -6,6 +6,7 @@ import Layout from '@/views/Layout/index.vue'
 import Home from '@/views/Home/index.vue'
 import Login from '@/views/Login/index.vue'
 import CrmList from '@/views/Crm/CrmList/index.vue'
+import CrmContact from '@/views/Crm/CrmContact/index.vue'
 import CrmDetail from '@/views/Crm/CrmList/components/CrmListDetail.vue'
 
 const router = createRouter({
@@ -19,6 +20,7 @@ const router = createRouter({
         { path: '/', name: 'home', component: Home, meta: { title: '首页' } },
         { path: '/crm', name: 'crm', component: Home, meta: { title: '客户管理' } },
         { path: '/crm/list', name: 'customerList', component: CrmList, meta: { title: '客户列表' } },
+        { path: '/crm/contact/list', name: 'customerContactList', component: CrmContact, meta: { title: '联系人表' } },
         { path: '/crm/list/detail/:id', name: 'customerDetail', component: CrmDetail, meta: { title: '详情' } },
       ],
     },
