@@ -253,6 +253,7 @@ watch(() => route.params.id, () => {
         <CrmCustomerContacts
           v-if="detail?.id"
           :customer-id="detail.id"
+          :customer-name="detail.company_name || detail.customer_name || ''"
           :namespace-id="route.query.namespace_id"
         />
         <CrmFollowUpRecords

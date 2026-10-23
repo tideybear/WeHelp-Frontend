@@ -1,27 +1,34 @@
 <script setup>
 import {
   getCrmCustomerContactListAPI,
-  updateCrmCustomerContactAPI,
   deleteCrmCustomerContactAPI,
 } from '@/apis/crm'
 import { computed, onMounted, ref, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Plus } from '@element-plus/icons-vue'
 import { useNamespace } from '@/stores/namespaceStore'
 import PaginationBar from '@/components/PaginationBar.vue'
+import { GENDER_OPTIONS, LANGUAGE_OPTIONS } from './components/shared'
+import CrmCreateContactDialog from './components/CrmCreateContactDialog.vue'
+import CrmEditContactDialog from './components/CrmEditContactDialog.vue'
 
 defineOptions({ name: 'CrmContactListPage' })
 
 const namespaceStore = useNamespace()
+const router = useRouter()
 
-// gender: 0未知 1男 2女
-const GENDER_OPTIONS = [
-  { label: '未知', value: 0 },
-  { label: '男', value: 1 },
-  { label: '女', value: 2 },
-]
-
-const LANGUAGE_OPTIONS = ['中文', 'English', 'French', 'German', 'Arabic', 'Spanish', 'Japanese']
+// 客户名称可点击跳转到对应客户详情：与 CrmList 列表的跳转方式保持一致
+function goCustomerDetail(row) {
+  if (row?.customer_id == null || row.customer_id === '') return
+  router.push({
+    name: 'customerDetail',
+    params: { id: String(row.customer_id) },
+    query: namespaceStore.currentNamespaceId
+      ? { namespace_id: String(namespaceStore.currentNamespaceId) }
+      : {},
+  })
+}
 
 // 空值判定：el-select 清空时回填的是 undefined（不是 ''），统一按「未筛选」处理
 function isBlank(v) {
@@ -58,92 +65,16 @@ function formatDate(dateStr) {
   return String(dateStr).split('T')[0]
 }
 
-// ===== 编辑弹窗 =====
-const dialogVisible = ref(false)
-const submitting = ref(false)
-const editingId = ref(null)
-const formRef = ref(null)
+// ===== 新增/编辑弹窗组件引用 =====
+const createDialogRef = ref(null)
+const editDialogRef = ref(null)
 
-const emptyForm = () => ({
-  name: '',
-  title: '',
-  department: '',
-  gender: 0,
-  phone: '',
-  mobile: '',
-  email: '',
-  wechat: '',
-  whatsapp: '',
-  linkedin: '',
-  language: '',
-  is_primary: 0,
-  birthday: '',
-  notes: '',
-})
-
-const form = ref(emptyForm())
-
-const rules = {
-  name: [{ required: true, message: '姓名不能为空', trigger: 'blur' }],
+function openCreateDialog() {
+  createDialogRef.value?.open()
 }
 
-// 打开编辑弹窗，回填行数据
 function openEditDialog(row) {
-  editingId.value = row.id
-  form.value = {
-    name: row.name ?? '',
-    title: row.title ?? '',
-    department: row.department ?? '',
-    gender: Number(row.gender ?? 0),
-    phone: row.phone ?? '',
-    mobile: row.mobile ?? '',
-    email: row.email ?? '',
-    wechat: row.wechat ?? '',
-    whatsapp: row.whatsapp ?? '',
-    linkedin: row.linkedin ?? '',
-    language: row.language ?? '',
-    is_primary: Number(row.is_primary ?? 0),
-    birthday: row.birthday ?? '',
-    notes: row.notes ?? '',
-  }
-  dialogVisible.value = true
-}
-
-// 空字符串转 null，避免写入脏数据；customer_name / namespace_id 沿用原值
-function toPayload() {
-  const payload = {}
-  Object.entries(form.value).forEach(([key, value]) => {
-    payload[key] = value === '' ? null : value
-  })
-  const ns = namespaceStore.currentNamespaceId
-  if (ns != null && ns !== '') payload.namespace_id = Number(ns)
-  return payload
-}
-
-async function handleSubmit() {
-  if (!formRef.value) return
-  try {
-    await formRef.value.validate()
-  } catch {
-    return
-  }
-
-  submitting.value = true
-  try {
-    const res = await updateCrmCustomerContactAPI(Number(editingId.value), toPayload())
-    if (res && res.success === false) {
-      ElMessage.error(res.message || res.msg || '保存失败')
-      return
-    }
-    ElMessage.success('更新成功')
-    dialogVisible.value = false
-    fetchDataList()
-  } catch (e) {
-    console.error('更新联系人失败:', e)
-    ElMessage.error('保存失败')
-  } finally {
-    submitting.value = false
-  }
+  editDialogRef.value?.open(row)
 }
 
 async function handleDelete(row) {
@@ -178,9 +109,9 @@ const columns = [
   { prop: 'title', label: '职位', width: 110 },
   { prop: 'department', label: '部门', width: 110 },
   { prop: 'gender', label: '性别', width: 70, align: 'center', slot: 'gender' },
-  { prop: 'phone', label: '联系电话', width: 130 },
-  { prop: 'mobile', label: '手机', width: 140, slot: 'contact', tooltip: true },
-  { prop: 'email', label: '邮箱', minWidth: 190, slot: 'contact', tooltip: true },
+  { prop: 'phone', label: '联系电话', width: 160 },
+  { prop: 'mobile', label: '手机', width: 160, slot: 'mobile' },
+  { prop: 'email', label: '邮箱', minWidth: 190, slot: 'email'},
   { prop: 'wechat', label: '微信', width: 120 },
   { prop: 'whatsapp', label: 'WhatsApp', width: 140 },
   { prop: 'linkedin', label: 'LinkedIn', minWidth: 190, tooltip: true },
@@ -224,7 +155,7 @@ const filteredList = computed(() => {
   const isPrimary = isBlank(f.is_primary) ? '' : Number(f.is_primary)
 
   return dataList.value.filter((row) => {
-    if (customer && toText(row.customer_name) !== customer) return false
+    if (customer && !toText(row.customer_name).includes(customer)) return false
     if (name && !toText(row.name).includes(name)) return false
     if (mobile && !toText(row.mobile).includes(mobile)) return false
     if (email && !toText(row.email).includes(email)) return false
@@ -314,13 +245,12 @@ watch(
     <div class="list-container">
       <div class="filter-container">
         <div class="filter-row">
-          <el-form class="filter-form" :inline="true" label-width="76px">
+          <el-form class="filter-form" label-position="top" @submit.prevent>
             <el-form-item label="关键词">
               <el-input
                 v-model="filters.keyword"
                 placeholder="姓名/客户/职位/手机/邮箱"
                 clearable
-                class="filter-input-wide"
                 :prefix-icon="Search"
                 @keyup.enter="handleSearch"
                 @clear="handleSearch"
@@ -331,7 +261,6 @@ watch(
                 v-model="filters.customer_name"
                 placeholder="模糊搜索"
                 clearable
-                class="filter-input"
                 @keyup.enter="handleSearch"
                 @clear="handleSearch"
               />
@@ -341,7 +270,6 @@ watch(
                 v-model="filters.name"
                 placeholder="模糊搜索"
                 clearable
-                class="filter-input"
                 @keyup.enter="handleSearch"
                 @clear="handleSearch"
               />
@@ -351,7 +279,6 @@ watch(
                 v-model="filters.mobile"
                 placeholder="模糊搜索"
                 clearable
-                class="filter-input"
                 @keyup.enter="handleSearch"
                 @clear="handleSearch"
               />
@@ -361,7 +288,6 @@ watch(
                 v-model="filters.email"
                 placeholder="模糊搜索"
                 clearable
-                class="filter-input"
                 @keyup.enter="handleSearch"
                 @clear="handleSearch"
               />
@@ -372,29 +298,30 @@ watch(
                 placeholder="全部"
                 clearable
                 filterable
-                class="filter-input"
                 @change="handleSearch"
               >
                 <el-option v-for="item in LANGUAGE_OPTIONS" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
-            <el-form-item label="主联系人">
+            <!-- <el-form-item label="主联系人">
               <el-select
                 v-model="filters.is_primary"
                 placeholder="全部"
                 clearable
-                class="filter-input"
                 @change="handleSearch"
               >
                 <el-option label="是" :value="1" />
                 <el-option label="否" :value="0" />
               </el-select>
-            </el-form-item>
+            </el-form-item> -->
           </el-form>
+        </div>
+        <div class="filter-actions">
           <div class="filter-toolbar">
             <el-button type="primary" @click="handleSearch">查询</el-button>
             <el-button @click="handleResetFilters">重置</el-button>
           </div>
+          <el-button type="primary" :icon="Plus" @click="openCreateDialog">新增联系人</el-button>
         </div>
       </div>
 
@@ -405,7 +332,6 @@ watch(
           :data="displayList"
           style="width: 100%"
           height="100%"
-          table-layout="auto"
           v-loading="loading"
           element-loading-text="加载中…"
           empty-text="暂无联系人"
@@ -424,16 +350,23 @@ watch(
             :align="col.align || 'left'"
             :show-overflow-tooltip="col.tooltip"
           >
-            <!-- 姓名：加粗-->
+            <!-- 姓名：加粗g-->
             <template v-if="col.slot === 'name'" #default="scope">
               <div class="cell-name">
                 <span>{{ scope.row.name }}</span>
               </div>
             </template>
 
-            <!-- 所属客户：可能为空（未关联客户的联系人） -->
+            <!-- 所属客户：可能为空（未关联客户的联系人）；有 customer_id 时可跳转详情 -->
             <template v-else-if="col.slot === 'customer'" #default="scope">
-              <span :class="{ 'text-muted': isBlank(scope.row.customer_name) }">
+              <span
+                v-if="scope.row.customer_name && scope.row.customer_id != null && scope.row.customer_id !== ''"
+                class="customer-link"
+                @click="goCustomerDetail(scope.row)"
+              >
+                {{ scope.row.customer_name }}
+              </span>
+              <span v-else :class="{ 'text-muted': isBlank(scope.row.customer_name) }">
                 {{ scope.row.customer_name ?? '未关联客户' }}
               </span>
             </template>
@@ -482,117 +415,9 @@ watch(
       </div>
     </div>
 
-    <!-- 编辑联系人弹窗 -->
-    <el-dialog v-model="dialogVisible" title="编辑联系人" width="720px" destroy-on-close>
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-        <div class="form-section-title">基本信息</div>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="姓名" prop="name">
-              <el-input v-model="form.name" clearable placeholder="请输入姓名" maxlength="100" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="职位">
-              <el-input v-model="form.title" clearable placeholder="选填" maxlength="100" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="部门">
-              <el-input v-model="form.department" clearable placeholder="选填" maxlength="100" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="性别">
-              <el-select v-model="form.gender" clearable placeholder="请选择" style="width: 100%">
-                <el-option
-                  v-for="opt in GENDER_OPTIONS"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="生日">
-              <el-date-picker
-                v-model="form.birthday"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="选填"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="沟通语言">
-              <el-select
-                v-model="form.language"
-                clearable
-                filterable
-                placeholder="选填"
-                style="width: 100%"
-              >
-                <el-option v-for="item in LANGUAGE_OPTIONS" :key="item" :label="item" :value="item" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <div class="form-section-title">联系方式</div>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="联系电话">
-              <el-input v-model="form.phone" clearable placeholder="选填" maxlength="50" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="手机">
-              <el-input v-model="form.mobile" clearable placeholder="选填" maxlength="50" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="邮箱">
-              <el-input v-model="form.email" clearable placeholder="选填" maxlength="255" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="微信">
-              <el-input v-model="form.wechat" clearable placeholder="选填" maxlength="100" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="WhatsApp">
-              <el-input v-model="form.whatsapp" clearable placeholder="选填" maxlength="50" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="LinkedIn">
-              <el-input v-model="form.linkedin" clearable placeholder="选填" maxlength="255" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <div class="form-section-title">其他</div>
-        <el-form-item label="主联系人">
-          <el-switch v-model="form.is_primary" :active-value="1" :inactive-value="0" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input
-            v-model="form.notes"
-            type="textarea"
-            :rows="3"
-            placeholder="选填"
-            show-word-limit
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
+    <!-- 新增/编辑联系人弹窗 -->
+    <CrmCreateContactDialog ref="createDialogRef" @success="fetchDataList" />
+    <CrmEditContactDialog ref="editDialogRef" @success="fetchDataList" />
   </div>
 </template>
 
@@ -617,7 +442,7 @@ watch(
 .filter-container {
   flex-shrink: 0;
   margin-bottom: 16px;
-  padding: 16px 20px 6px;
+  padding: 16px 20px 14px;
   background-color: #ffffff;
   border-radius: 8px;
   border: 1px solid var(--el-border-color-lighter);
@@ -626,30 +451,51 @@ watch(
 .filter-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 16px;
+  align-items: flex-start;
+  gap: 12px 16px;
 }
 
+// 筛选表单：自适应网格平铺，标签在上、控件在下
 .filter-form {
   flex: 1 1 auto;
   min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px 16px;
 
   :deep(.el-form-item) {
-    margin-bottom: 12px;
+    margin-bottom: 0;
+    min-width: 0;
   }
 
   :deep(.el-form-item__label) {
     font-weight: 500;
+    font-size: 13px;
     color: #606266;
+    padding-bottom: 2px;
+    line-height: 20px;
   }
 
-  :deep(.filter-input) {
-    width: 160px;
+  // 标签在上时 el-form-item 是 block，控件需撑满网格单元
+  :deep(.el-form-item__content) {
+    display: block;
   }
 
-  :deep(.filter-input-wide) {
-    width: 200px;
+  :deep(.el-input),
+  :deep(.el-select) {
+    width: 100%;
   }
+}
+
+// 操作区：左侧查询/重置，右侧新增
+.filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .filter-toolbar {
@@ -719,15 +565,6 @@ watch(
   padding-top: 12px;
 }
 
-.form-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-  margin-bottom: 12px;
-  padding-left: 8px;
-  border-left: 3px solid var(--el-color-primary);
-}
-
 .cell-name {
   display: flex;
   align-items: center;
@@ -744,6 +581,16 @@ watch(
 .text-link {
   color: var(--el-color-primary);
   cursor: text;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// 客户名称：可点击跳转客户详情
+.customer-link {
+  color: var(--el-color-primary);
+  cursor: pointer;
 
   &:hover {
     text-decoration: underline;
