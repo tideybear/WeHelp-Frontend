@@ -79,6 +79,18 @@ export const deleteCrmCustomerContactAPI = (id) => {
   })
 }
 
+/**
+ * 移除联系人与所属客户的关联（解绑，不删除联系人本身）
+ * 后端把 customer_id 置为 NULL
+ */
+export const removeCrmCustomerContactCustomerAPI = (id) => {
+  return request({
+    url: `/crm/contacts/update/${id}`,
+    method: 'PUT',
+    data: { customer_id: null },
+  })
+}
+
 /**客户跟进记录列表 */
 export const getCrmCustomerFollowUpRecordAPI = (params) => {
   return request({

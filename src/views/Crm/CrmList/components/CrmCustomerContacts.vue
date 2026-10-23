@@ -4,10 +4,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import {
   getCrmCustomerContactListAPI,
-  deleteCrmCustomerContactAPI,
+  removeCrmCustomerContactCustomerAPI,
 } from '@/apis/crm'
 import { GENDER_OPTIONS } from '@/views/Crm/CrmContact/components/shared'
-import CrmCreateContactDialog from '@/views/Crm/CrmContact/components/CrmCreateContactDialog.vue'
+import CrmUnassignedContactDialog from '@/views/Crm/CrmContact/components/CrmUnassignedContactDialog.vue'
 import CrmEditContactDialog from '@/views/Crm/CrmContact/components/CrmEditContactDialog.vue'
 
 defineOptions({ name: 'CrmCustomerContacts' })
@@ -80,7 +80,7 @@ async function loadContacts() {
   }
 }
 
-// 打开新增弹窗
+// 打开「添加联系人」弹窗：先展示未关联客户的联系人列表
 function openCreateDialog() {
   createDialogRef.value?.open()
 }
@@ -90,30 +90,35 @@ function openEditDialog(row) {
   editDialogRef.value?.open(row)
 }
 
-// 删除联系人
-async function handleDelete(row) {
+// 移除联系人与所属客户的关联（联系人本身保留，仅解绑 customer_id）
+async function handleRemove(row) {
   try {
-    await ElMessageBox.confirm(`确定要删除联系人「${row.name}」吗？`, '删除确认', {
-      confirmButtonText: '确定删除',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
+    await ElMessageBox.confirm(
+      `确定要将联系人「${row.name}」从当前客户移除吗？移除后该联系人不再归属本客户，但联系人本身会保留。`,
+      '移除确认',
+      {
+        confirmButtonText: '确定移除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
   } catch {
     return
   }
 
   try {
-    const res = await deleteCrmCustomerContactAPI(Number(row.id))
-    if (res && res.success === false) {
-      ElMessage.error(res.message || res.msg || '删除失败')
+    const res = await removeCrmCustomerContactCustomerAPI(Number(row.id))
+    // 后端成功时返回 { result: { id } }；失败时返回 404/400（会被 http 层拦截抛错）
+    if (res?.result?.id == null) {
+      ElMessage.error(res?.message || res?.msg || '移除失败')
       return
     }
-    ElMessage.success('删除成功')
+    ElMessage.success('已移除该联系人的客户归属')
     loadContacts()
     emit('refresh')
   } catch (e) {
     console.error(e)
-    ElMessage.error('删除失败')
+    ElMessage.error('移除失败')
   }
 }
 
@@ -203,13 +208,13 @@ watch(
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="openEditDialog(row)">编辑</el-button>
-          <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button link type="warning" size="small" @click="handleRemove(row)">移除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <!-- 新增/编辑弹窗：复用 CrmContact 模块的同一套弹窗，所属客户固定为当前客户 -->
-    <CrmCreateContactDialog
+    <!-- 添加联系人弹窗：先展示未关联客户的联系人列表，其中可再点「新增联系人」 -->
+    <CrmUnassignedContactDialog
       ref="createDialogRef"
       :fixed-customer-id="customerId"
       :fixed-customer-name="customerName"

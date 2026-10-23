@@ -1,4 +1,4 @@
-import { getCrmCustomerListAPI } from '@/apis/crm'
+import { getCrmCustomerListAPI, getCrmCustomerContactListAPI } from '@/apis/crm'
 
 // gender: 0未知 1男 2女
 export const GENDER_OPTIONS = [
@@ -78,4 +78,23 @@ export function normalizeCustomerId(value) {
   if (value == null || value === '') return ''
   const num = Number(value)
   return Number.isNaN(num) ? '' : num
+}
+
+/**
+ * 拉取「尚未归属任何客户」的联系人列表。
+ *
+ * 后端 /crm/contacts 支持按 namespace_id / customer_id 过滤，但没有
+ * 「customer_id IS NULL」的入参，且 customer_id 为空时该参数会被
+ * http 层当作未传参剔除掉，所以只能拉全量后在前端筛选。
+ */
+export async function loadUnassignedContacts(namespaceId) {
+  if (namespaceId == null || namespaceId === '') return []
+  const res = await getCrmCustomerContactListAPI({
+    namespace_id: Number(namespaceId),
+  })
+  const result = res?.result ?? res
+  const list = result?.list ?? result?.data ?? (Array.isArray(result) ? result : [])
+  return (Array.isArray(list) ? list : []).filter(
+    (row) => row?.customer_id == null || row.customer_id === '',
+  )
 }
