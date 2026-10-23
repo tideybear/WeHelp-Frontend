@@ -14,6 +14,9 @@ const props = defineProps({
   },
 })
 
+// 点击「查看全部」跳转到跟进记录列表页，由父组件处理跳转（需要客户 id / 名称）
+const emit = defineEmits(['viewAll'])
+
 // 首屏完整展示的记录条数，其余在容器内向下滚动查看
 const VISIBLE_COUNT = 3
 const PAGE_SIZE = 20
@@ -112,6 +115,11 @@ function refresh() {
   loadRecords(false)
 }
 
+// 点击「查看全部」跳转跟进记录列表
+function handleViewAll() {
+  emit('viewAll')
+}
+
 function handleResize() {
   updateMaxHeight()
 }
@@ -142,7 +150,12 @@ defineExpose({ refresh })
   <div class="followup-panel">
     <div class="followup-header">
       <span class="followup-title">跟进记录</span>
-      <span v-if="total > 0" class="followup-count">共 {{ total }} 条</span>
+      <div class="followup-header-right">
+        <span v-if="total > 0" class="followup-count">共 {{ total }} 条</span>
+        <el-button link type="primary" size="small" class="followup-more" @click="handleViewAll">
+          查看全部
+        </el-button>
+      </div>
     </div>
 
     <div
@@ -218,6 +231,13 @@ defineExpose({ refresh })
   margin-bottom: 12px;
 }
 
+// 右侧：条数 + 「查看全部」入口
+.followup-header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .followup-title {
   font-size: 15px;
   font-weight: 600;
@@ -227,6 +247,12 @@ defineExpose({ refresh })
 .followup-count {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.followup-more {
+  font-size: 12px;
+  padding: 0;
+  height: auto;
 }
 
 .followup-scroll {

@@ -51,6 +51,19 @@ function goBack() {
   router.push({ name: 'customerList' })
 }
 
+// 跳转跟进记录列表页（/crm/follow/record），并按当前客户预置筛选条件
+function goFollowUpRecords() {
+  const customerName = detail.value?.company_name || detail.value?.customer_name || ''
+  router.push({
+    name: 'customerFollowUpRecord',
+    query: {
+      ...(detail.value?.id ? { customer_id: String(detail.value.id) } : {}),
+      ...(customerName ? { customer_name: customerName } : {}),
+      ...(route.query.namespace_id ? { namespace_id: String(route.query.namespace_id) } : {}),
+    },
+  })
+}
+
 function isReadonly(field) {
   return READONLY_FIELDS.includes(field)
 }
@@ -260,6 +273,7 @@ watch(() => route.params.id, () => {
           v-if="detail?.id"
           :customer-id="detail.id"
           @refresh="loadDetail"
+          @view-all="goFollowUpRecords"
         />
       </el-col>
       <el-col :span="12">

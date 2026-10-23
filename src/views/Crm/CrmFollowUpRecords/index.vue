@@ -4,6 +4,7 @@ import {
   getCrmCustomerFollowUpRecordAPI,
 } from '@/apis/crm'
 import { computed, onMounted, ref, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { useNamespace } from '@/stores/namespaceStore'
@@ -26,11 +27,14 @@ import CrmFollowUpRecordDialog from './components/CrmFollowUpRecordDialog.vue'
 defineOptions({ name: 'CrmFollowUpRecordListPage' })
 
 const namespaceStore = useNamespace()
+const route = useRoute()
+const router = useRouter()
 
 // 空值判定：el-select 清空时回填的是 undefined（不是 ''），统一按「未筛选」处理
 // 过滤表单默认值，抽成工厂避免重置时漏字段
 const emptyFilters = () => ({
   keyword: '',
+  customer_id: '',
   customer_name: '',
   contact_name: '',
   follow_up_type_id: '',
@@ -42,6 +46,21 @@ const emptyFilters = () => ({
 
 const filters = ref(emptyFilters())
 
+// 最近一次由路由回填的客户名称：手动改名称时据此判断是否需要清掉 id
+let routeAppliedCustomerName = ''
+
+// 手动修改客户名称时清掉 id，否则名称筛选会被 id 的精确匹配覆盖
+watch(
+  () => filters.value.customer_name,
+  (name) => {
+    if (name === routeAppliedCustomerName) return
+    routeAppliedCustomerName = name
+    if (filters.value.customer_id) {
+      filters.value.customer_id = ''
+    }
+  },
+)
+
 // 下拉选项（客户 / 跟进人）
 const customerOptions = ref([])
 const ownerOptions = ref([])
@@ -50,11 +69,30 @@ function formatDate(dateStr) {
   return formatDateTime(dateStr)
 }
 
+// 客户名称可点击跳转到对应客户详情：与 CrmContact 列表的跳转方式保持一致
+function goCustomerDetail(row) {
+  const customerId = row?.customer_id
+  if (customerId == null || customerId === '') return
+  router.push({
+    name: 'customerDetail',
+    params: { id: String(customerId) },
+    query: namespaceStore.currentNamespaceId
+      ? { namespace_id: String(namespaceStore.currentNamespaceId) }
+      : {},
+  })
+}
+
 // ===== 新增/编辑弹窗组件引用 =====
 const createDialogRef = ref(null)
 
 function openCreateDialog() {
   createDialogRef.value?.open()
+}
+
+// 打开编辑弹窗：回填行数据（弹窗内部根据是否传入 row 区分新增/编辑）
+function openEditDialog(row) {
+  if (!row?.id) return
+  createDialogRef.value?.open(row)
 }
 
 async function handleDelete(row) {
@@ -85,7 +123,7 @@ async function handleDelete(row) {
 // 列配置：slot 决定单元格渲染方式，tooltip 决定是否单行省略 + 悬停显示全量
 const columns = [
   { prop: 'follow_up_at', label: '跟进时间', width: 150, slot: 'date' },
-  { prop: 'customer_id', label: '所属客户', minWidth: 180, slot: 'customer' },
+  { prop: 'customer_id', label: '客户名称', minWidth: 180, slot: 'customer' },
   { prop: 'contact_name', label: '对接人', width: 110, slot: 'contact' },
   { prop: 'follow_up_type_name', label: '跟进方式', width: 90, align: 'center', slot: 'type' },
   { prop: 'follow_up_status_id', label: '跟进后状态', width: 100, align: 'center', slot: 'status' },
@@ -116,6 +154,7 @@ const filteredList = computed(() => {
   const f = filters.value
   const kw = toText(f.keyword)
   const customerName = toText(f.customer_name)
+  const customerId = isBlank(f.customer_id) ? '' : Number(f.customer_id)
   const contactName = toText(f.contact_name)
   const typeId = isBlank(f.follow_up_type_id) ? '' : Number(f.follow_up_type_id)
   const statusId = isBlank(f.follow_up_status_id) ? '' : Number(f.follow_up_status_id)
@@ -124,7 +163,10 @@ const filteredList = computed(() => {
   const channel = isBlank(f.channel) ? '' : f.channel
 
   return dataList.value.filter((row) => {
-    if (customerName && !toText(customerNameOf(row)).includes(customerName)) return false
+    // 指定了客户 id 时按 id 精确匹配（客户名列表未加载全时按名匹配会漏数据）
+    if (customerId !== '' && Number(row.customer_id) !== customerId) return false
+    // 没有 id 时退化为按客户名模糊匹配
+    if (customerId === '' && customerName && !toText(customerNameOf(row)).includes(customerName)) return false
     if (contactName && !toText(row.contact_name).includes(contactName)) return false
     if (typeId !== '' && Number(row.follow_up_type_id) !== typeId) return false
     if (statusId !== '' && Number(row.follow_up_status_id) !== statusId) return false
@@ -217,6 +259,50 @@ async function loadOptions() {
 function handleSearch() {
   currentPage.value = 1
   tableRef.value?.setScrollTop?.(0)
+  syncCustomerFilterToRoute()
+}
+
+// 从 URL 查询参数预置筛选条件（从客户详情页「查看全部」跳转过来时，自动搜索对应公司）
+function applyRouteQuery() {
+  const q = route.query || {}
+  const customerId = q.customer_id
+  const customerName = q.customer_name
+
+  const next = emptyFilters()
+  if (customerId != null && customerId !== '') next.customer_id = String(customerId)
+  if (customerName != null && customerName !== '') next.customer_name = String(customerName)
+
+  // 记录回填的名称，避免触发「手动改名称则清空 id」的逻辑
+  routeAppliedCustomerName = next.customer_name
+  filters.value = next
+  currentPage.value = 1
+}
+
+// 把当前生效的客户筛选同步回 URL，便于刷新 / 分享后保持筛选状态
+function syncCustomerFilterToRoute() {
+  const customerId = filters.value.customer_id
+  const customerName = filters.value.customer_name
+  const currentId = route.query.customer_id
+  const currentName = route.query.customer_name
+  if (
+    String(currentId ?? '') === String(customerId ?? '') &&
+    String(currentName ?? '') === String(customerName ?? '')
+  ) {
+    return
+  }
+
+  const query = { ...route.query }
+  if (customerId) {
+    query.customer_id = customerId
+  } else {
+    delete query.customer_id
+  }
+  if (customerName) {
+    query.customer_name = customerName
+  } else {
+    delete query.customer_name
+  }
+  router.replace({ name: 'customerFollowUpRecord', query })
 }
 
 function handleResetFilters() {
@@ -234,6 +320,7 @@ function handleCurrentChange(val) {
 }
 
 onMounted(() => {
+  applyRouteQuery()
   fetchDataList()
   loadOptions()
 })
@@ -244,6 +331,19 @@ watch(
     currentPage.value = 1
     fetchDataList()
     loadOptions()
+  },
+)
+
+// 从其它页面（如客户详情）带查询参数跳转过来时，同步筛选条件
+watch(
+  () => route.query,
+  (query) => {
+    if (
+      String(query?.customer_id ?? '') !== String(filters.value.customer_id ?? '') ||
+      String(query?.customer_name ?? '') !== String(filters.value.customer_name ?? '')
+    ) {
+      applyRouteQuery()
+    }
   },
 )
 </script>
@@ -264,7 +364,7 @@ watch(
                 @clear="handleSearch"
               />
             </el-form-item>
-            <el-form-item label="所属客户">
+            <el-form-item label="客户名称">
               <el-input
                 v-model="filters.customer_name"
                 placeholder="模糊搜索"
@@ -370,9 +470,16 @@ watch(
               {{ formatDate(scope.row?.[col.prop]) }}
             </template>
 
-            <!-- 所属客户 -->
+            <!-- 客户名称：有 customer_id 时可点击跳转客户详情 -->
             <template v-else-if="col.slot === 'customer'" #default="scope">
-              {{ customerNameOf(scope.row) || '—' }}
+              <span
+                v-if="scope.row?.customer_id != null && scope.row?.customer_id !== ''"
+                class="customer-link"
+                @click="goCustomerDetail(scope.row)"
+              >
+                {{ customerNameOf(scope.row) || '—' }}
+              </span>
+              <span v-else>{{ customerNameOf(scope.row) || '—' }}</span>
             </template>
 
             <!-- 对接人 / 跟进人 -->
@@ -411,8 +518,9 @@ watch(
               {{ scope.row?.[col.prop] ?? '—' }}
             </template>
           </el-table-column>
-          <el-table-column fixed="right" label="操作" width="140">
+          <el-table-column fixed="right" label="操作" width="160">
             <template #default="scope">
+              <el-button link type="primary" size="small" @click="openEditDialog(scope.row)">编辑</el-button>
               <el-button link type="danger" size="small" @click="handleDelete(scope.row)">删除</el-button>
             </template>
           </el-table-column>
@@ -431,7 +539,7 @@ watch(
       </div>
     </div>
 
-    <!-- 新增跟进记录弹窗 -->
+    <!-- 新增/编辑跟进记录弹窗 -->
     <CrmFollowUpRecordDialog ref="createDialogRef" @success="fetchDataList" />
   </div>
 </template>
@@ -559,6 +667,16 @@ watch(
 
 .text-link {
   color: var(--el-color-primary);
+}
+
+// 客户名称跳转链接：与 CrmContact 列表保持一致的样式
+.customer-link {
+  color: var(--el-color-primary);
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 .text-muted {
