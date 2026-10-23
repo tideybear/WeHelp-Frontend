@@ -113,3 +113,38 @@ export const deleteCrmFollowUpRecordAPI = (id) => {
     method: 'DELETE',
   })
 }
+
+/**客户需求记录列表 */
+export const getCrmCustomerProductsAPI = (params) => {
+  return request({
+    url: '/crm/customer/products',
+    method: 'GET',
+    params,
+  })
+}
+
+/** 新增客户需求记录 */
+export const createCrmCustomerProductsAPI = (data) => {
+  return request({
+    url: '/crm/customer/products/create',
+    method: 'POST',
+    data,
+  })
+}
+
+/** 更新客户需求记录 */
+export const updateCrmCustomerProductsAPI = (id, data) => {
+  return request({
+    url: `/crm/customer/products/update/${id}`,
+    method: 'PUT',
+    data,
+  })
+}
+
+/** 删除客户需求记录 */
+export const deleteCrmCustomerProductsAPI = (id) => {
+  return request({
+    url: `/crm/customer/products/delete/${id}`,
+    method: 'DELETE',
+  })
+}

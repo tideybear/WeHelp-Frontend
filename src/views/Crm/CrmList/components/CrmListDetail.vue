@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCrmCustomerDetailAPI, updateCrmCustomerAPI, deleteCrmCustomerAPI } from '@/apis/crm'
 import CrmCustomerContacts from './CrmCustomerContacts.vue'
 import CrmFollowUpRecords from './CrmFollowUpRecords.vue'
+import CrmCustomerProducts from './CrmCustomerProducts.vue'
 
 defineOptions({ name: 'CrmCustomerDetailDefault' })
 
@@ -264,6 +265,11 @@ watch(() => route.params.id, () => {
         <div class="module-placeholder">背景调查</div>
       </el-col>
     </el-row>
+    <CrmCustomerProducts
+      v-if="detail?.id"
+      :customer-id="detail.id"
+      @refresh="loadDetail"
+    />
 
     <!-- 操作按钮区域 -->
     <div class="detail-actions" v-if="detail">
