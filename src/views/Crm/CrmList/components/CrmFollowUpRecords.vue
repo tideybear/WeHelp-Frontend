@@ -266,7 +266,14 @@ defineExpose({ refresh })
   padding-left: 4px;
 }
 
+// 每个时间线条目高度固定，保证时间轴节点与卡片上下对齐
 .record-card {
+  // 统一卡片高度：头部 20px + 间距 6px + 内容 2 行 39px + 下次跟进 18px + 间距 6px + 内边距 20px ≈ 112px
+  height: var(--record-card-height, 112px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--el-fill-color-light);
   border-radius: 6px;
   padding: 10px 12px;
@@ -277,24 +284,62 @@ defineExpose({ refresh })
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+  // 头部不换行，超出部分裁剪，避免头部行高变化影响卡片总高度
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .record-owner {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// 头部标签在空间不足时可被压缩，避免撑破卡片宽度
+.record-head :deep(.el-tag) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .record-content {
+  flex: 1;
+  min-height: 0;
   font-size: 13px;
   color: var(--el-text-color-regular);
   white-space: pre-wrap;
   word-break: break-word;
+  // 内容超出时在卡片内纵向滚动，可纵览全文；卡片总高度保持不变
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--el-border-color) transparent;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--el-border-color);
+    border-radius: 2px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
 }
 
 .record-next {
   margin-top: 6px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .record-more,
