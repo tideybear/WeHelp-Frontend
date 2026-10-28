@@ -2,7 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getCrmCustomerDetailAPI, updateCrmCustomerAPI, deleteCrmCustomerAPI } from '@/apis/crm'
+import { MagicStick } from '@element-plus/icons-vue'
+import { getCrmCustomerDetailAPI, updateCrmCustomerAPI, deleteCrmCustomerAPI, getCrmCustomerFollowUpRecordAPI, deepAnalysisAPI } from '@/apis/crm'
 import { getUserListAPI } from '@/apis/user'
 import { useNamespace } from '@/stores/namespaceStore'
 import CrmCustomerContacts from './CrmCustomerContacts.vue'
@@ -21,6 +22,15 @@ import {
   normalizeId,
   toDateValue,
   formatDateTime,
+  ANALYSIS_LABELS,
+  ANALYSIS_MAPPING,
+  BASIC_INFO_KEYS,
+  REMARK_KEYS,
+  ANALYSIS_FALLBACK_GROUP,
+  appendText,
+  labelToValue,
+  extractAddress,
+  mergeAddress,
 } from './shared'
 
 defineOptions({ name: 'CrmCustomerDetailDefault' })
@@ -31,8 +41,23 @@ const namespaceStore = useNamespace()
 
 const detailLoading = ref(false)
 const saving = ref(false)
+const analyzing = ref(false) // 深入分析中（后端耗时较长）
 const detail = ref(null)
 const editBufferMap = ref({}) // 存储所有修改的字段
+const addressEditing = ref(false) // 「地址」行是否处于编辑态（与基本信息共用缓冲区）
+const basicInfoEditing = ref(false) // 「基本信息」行是否处于编辑态
+
+// 深入分析结果面板
+const analysisVisible = ref(false)
+const analysisResult = ref([]) // [{ label, value, target, type }]
+
+// 下拉选项注册表：深入分析按 label 反查 value
+const OPTION_REGISTRY = {
+  CUSTOMER_TYPE_OPTIONS,
+  COUNTRY_OPTIONS,
+  REGION_OPTIONS,
+  INDUSTRY_OPTIONS,
+}
 
 // 负责人（销售）下拉选项
 const ownerOptions = ref([])
@@ -83,6 +108,14 @@ function statusTagType(value) {
   }
 }
 
+// 深入分析结果条目的标签配色
+// field：已填入对应字段；fallback：打包进基本信息/备注；conflict：与原值冲突，仅记录待核实
+function analysisTagType(type) {
+  if (type === 'conflict') return 'warning'
+  if (type === 'fallback') return 'info'
+  return 'success'
+}
+
 // 状态 id 归一化为数字，避免后端返回字符串导致下拉框匹配不到 option
 function normalizeStatus(value) {
   return normalizeId(value)
@@ -113,6 +146,8 @@ async function loadDetail() {
   if (!recordId.value) return
   // 切换客户时清空编辑缓冲区
   editBufferMap.value = {}
+  addressEditing.value = false
+  basicInfoEditing.value = false
   detailLoading.value = true
   try {
     const res = await getCrmCustomerDetailAPI(recordId.value)
@@ -131,6 +166,298 @@ async function loadDetail() {
 
 function goBack() {
   router.push({ name: 'customerList' })
+}
+
+// 深入分析：把页面上的指定字段与所有跟进记录内容合并打包成 JSON 并打印到控制台
+async function handleDeepAnalysis() {
+  const customerId = detail.value?.id ?? recordId.value
+
+  // 取字段值（优先使用编辑缓冲区的值，否则使用原始值）
+  const pick = (field) => {
+    const v = getFieldValue(field)
+    return v === undefined || v === null ? '' : v
+  }
+
+  // 取 id 型字段对应的名称（优先按 id 匹配字典，其次用后端返回的 *_name）
+  const pickName = (field, options, nameField) => {
+    const id = normalizeId(getFieldValue(field))
+    if (id !== '') {
+      const label = optionLabel(options, id)
+      if (label) return label
+    }
+    return detail.value?.[nameField] || ''
+  }
+
+  const regionName = pickName('region_id', REGION_OPTIONS, 'region_name')
+  const countryName = pickName('country_id', COUNTRY_OPTIONS, 'country_name')
+  const industryName = pickName('industry_id', INDUSTRY_OPTIONS, 'industry_name')
+
+  const payload = {
+    customer_name: pick('customer_name'),
+    company_name_en: pick('company_name_en'),
+    region_name: regionName,
+    country_name: countryName,
+    industry_name: industryName,
+    // 后端按 crm_master_data 字段结构返回，这三个字段位填名称而非 id
+    region_id: regionName,
+    country_id: countryName,
+    industry_id: industryName,
+    website: pick('website'),
+    customer_basic_info: pick('customer_basic_info'),
+    customer_needs: pick('customer_needs'),
+    follow_up_strategy: pick('follow_up_strategy'),
+    follow_up_content: '',
+  }
+
+  // 跟进记录：把所有记录的 content 用 || 合并，输出只有一条记录
+  if (customerId !== undefined && customerId !== null && customerId !== '') {
+    try {
+      const res = await getCrmCustomerFollowUpRecordAPI({
+        customer_id: Number(customerId),
+        page: 1,
+        pageSize: 500,
+      })
+      const result = res?.result ?? res
+      const list = result?.list ?? result?.data ?? (Array.isArray(result) ? result : [])
+      const mergedContent = (Array.isArray(list) ? list : [])
+        .map((item) => item?.content)
+        .filter((c) => c !== undefined && c !== null && c !== '')
+        .join('||')
+
+      payload.follow_up_content = mergedContent
+    } catch (e) {
+      console.error('[深入分析] 获取跟进记录失败:', e)
+    }
+  }
+
+  console.log('[深入分析] 客户数据打包结果:', JSON.stringify(payload, null, 2))
+
+  // 调用深入分析接口（后端耗时较长，超时放宽到 180s）
+  analyzing.value = true
+  try {
+    const res = await deepAnalysisAPI(payload, 180000)
+    console.log('[深入分析] 接口返回结果:', res)
+    const result = res?.result ?? res ?? {}
+    const mapped = applyAnalysisResult(result)
+    analysisResult.value = mapped
+    analysisVisible.value = true
+    ElMessage.success('深入分析完成')
+    return res
+  } catch (e) {
+    console.error('[深入分析] 调用深入分析接口失败:', e)
+    if (e?.code === 'ECONNABORTED') {
+      ElMessage.error('深入分析超时，请稍后重试')
+    } else {
+      ElMessage.error(e?.response?.data?.message || e?.response?.data?.msg || '深入分析失败')
+    }
+    return null
+  } finally {
+    analyzing.value = false
+  }
+}
+
+/**
+ * 把深入分析结果落到客户详情表单：
+ * - 能对应上表单字段的 → 追加到该字段原值之后；
+ * - 对应不上的 → 按性质打包进「基本信息」或「备注」；
+ * - 全部写入 editBufferMap，等用户点「保存」才落库。
+ */
+function applyAnalysisResult(result) {
+  const items = []      // 面板展示：{ label, value, target, type }
+  const buffer = {}     // 待写入编辑缓冲区的字段
+  const remarks = []    // 需要追加到备注里的内容
+  const basicExtras = [] // 需要追加到基本信息里的内容
+
+  // 当前值：本次已写入 buffer 的优先，其次编辑缓冲区，最后原始数据
+  const current = (field) => {
+    if (buffer[field] !== undefined) return buffer[field]
+    if (editBufferMap.value[field] !== undefined) return editBufferMap.value[field]
+    return detail.value?.[field]
+  }
+
+  const setField = (field, value) => {
+    buffer[field] = appendText(current(field), value)
+  }
+
+  for (const rule of ANALYSIS_MAPPING) {
+    const raw = result[rule.key]
+    if (raw == null || raw === '') continue
+
+    if (rule.type === 'enum') {
+      const options = OPTION_REGISTRY[rule.options] || []
+      // 主字段（如 country_cn）优先，取不到用备用字段（如 country）
+      const label = raw || (rule.fallbackKey ? result[rule.fallbackKey] : '')
+      if (label == null || label === '') continue
+      const value = labelToValue(options, label)
+      if (value == null) {
+        // 下拉里没有对应项：退回到文本形式，打包进基本信息
+        items.push({ label: rule.label, value: label, target: '基本信息', type: 'fallback' })
+        basicExtras.push(`${rule.label}：${label}`)
+      } else {
+        const old = current(rule.target)
+        // 已有不同的值 → 保留原值，新值写进备注，避免覆盖用户/历史数据
+        if (old != null && old !== '' && String(old) !== String(value)) {
+          items.push({ label: rule.label, value: label, target: rule.targetLabel, type: 'conflict' })
+          remarks.push(`${rule.label}：分析结果为「${label}」，与当前值（${optionLabel(options, old)}）不一致，请核实。`)
+        } else {
+          buffer[rule.target] = value
+          items.push({ label: rule.label, value: label, target: rule.targetLabel, type: 'field' })
+        }
+      }
+      // 备用字段（如英文国名 country / 英文行业 industry）单独保留一条，
+      // 避免模型返回的英文原文被丢掉
+      if (rule.fallbackKey) {
+        const alt = result[rule.fallbackKey]
+        if (alt != null && alt !== '' && String(alt) !== String(label)) {
+          items.push({ label: rule.label + '（原文）', value: alt, target: '基本信息', type: 'fallback' })
+          basicExtras.push(`${rule.label}（原文）：${alt}`)
+        }
+      }
+      continue
+    }
+
+    if (rule.type === 'revenue') {
+      // 营收：模型常给「1.27」+ 币种（USD），实际单位多半是十亿（billion）。
+      // 表里的 company_revenue 是无单位的数值，这里原样写入数值，
+      // 并把单位存疑的提示写进备注，避免数值被误读。
+      const num = Number(String(raw).replace(/[^\d.]/g, ''))
+      if (Number.isNaN(num)) {
+        items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'fallback' })
+        basicExtras.push(`${rule.label}：${raw}`)
+      } else {
+        const old = current(rule.target)
+        if (old != null && old !== '') {
+          items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'conflict' })
+          remarks.push(`${rule.label}：分析结果为 ${raw}，当前值为 ${old}，请核实。`)
+        } else {
+          buffer[rule.target] = num
+          items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+        }
+      }
+      if (num < 1000) {
+        remarks.push(`${rule.label}原始值 ${raw}，单位请核实（可能是十亿/百万）`)
+      }
+      continue
+    }
+
+    if (rule.type === 'number') {
+      const num = Number(String(raw).replace(/[^\d.]/g, ''))
+      const old = current(rule.target)
+      if (old != null && old !== '') {
+        items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'conflict' })
+        remarks.push(`${rule.label}：分析结果为 ${raw}，当前值为 ${old}，请核实。`)
+        continue
+      }
+      if (Number.isNaN(num)) {
+        items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'fallback' })
+        basicExtras.push(`${rule.label}：${raw}`)
+        continue
+      }
+      buffer[rule.target] = num
+      items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+      continue
+    }
+
+    if (rule.type === 'address') {
+      // 地址存放在 customer_basic_info 的「总部地址：xxx」一行里，
+      // 单独抽出成「地址」行展示，不混进基本信息的正文。
+      const old = extractAddress(current('customer_basic_info')).address
+      if (old && old !== raw) {
+        // 已有地址且不一致 → 保留原地址，新地址写进备注提示核实
+        items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'conflict' })
+        remarks.push(`${rule.label}：分析结果为「${raw}」，与当前值（${old}）不一致，请核实。`)
+        continue
+      }
+      buffer.customer_basic_info = mergeAddress(current('customer_basic_info'), raw)
+      items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+      continue
+    }
+
+    if (rule.type === 'remark') {
+      // 没有对应表单字段，直接打包进备注
+      items.push({ label: rule.label, value: raw, target: '备注', type: 'fallback' })
+      remarks.push(`${rule.label}：${raw}`)
+      continue
+    }
+
+    if (rule.type === 'website') {
+      // 网址是单值字段，已有值时用「、」分隔追加，不换行（换行会破坏可点击性）
+      const oldText = String(current(rule.target) ?? '').trim()
+      if (!oldText) {
+        buffer[rule.target] = raw
+      } else if (!oldText.includes(raw)) {
+        buffer[rule.target] = `${oldText}、${raw}`
+      }
+      items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+      continue
+    }
+
+    // text / multiline
+    setField(rule.target, raw)
+    items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+  }
+
+  // 没有对应表单字段的信息项
+  const consumed = new Set()
+  for (const rule of ANALYSIS_MAPPING) {
+    consumed.add(rule.key)
+    if (rule.fallbackKey) consumed.add(rule.fallbackKey)
+  }
+
+  for (const key of BASIC_INFO_KEYS) {
+    consumed.add(key)
+    const raw = result[key]
+    if (raw == null || raw === '') continue
+    items.push({ label: ANALYSIS_LABELS[key] || key, value: raw, target: '基本信息', type: 'fallback' })
+    basicExtras.push(`${ANALYSIS_LABELS[key] || key}：${raw}`)
+  }
+  for (const key of REMARK_KEYS) {
+    consumed.add(key)
+    const raw = result[key]
+    if (raw == null || raw === '') continue
+    items.push({ label: ANALYSIS_LABELS[key] || key, value: raw, target: '备注', type: 'fallback' })
+    remarks.push(`${ANALYSIS_LABELS[key] || key}：${raw}`)
+  }
+
+  // 兜底：规则表没覆盖到的 key（后端新增字段等）也要落到基本信息/备注，
+  // 保证返回的数据一条不漏。按 key 名里的关键词决定归到哪一组。
+  for (const [key, raw] of Object.entries(result)) {
+    if (consumed.has(key)) continue
+    if (raw == null || raw === '') continue
+    const label = ANALYSIS_LABELS[key] || key
+    const group = ANALYSIS_FALLBACK_GROUP[key] || guessFallbackGroup(key)
+    if (group === 'basic') {
+      items.push({ label, value: raw, target: '基本信息', type: 'fallback' })
+      basicExtras.push(`${label}：${raw}`)
+    } else {
+      items.push({ label, value: raw, target: '备注', type: 'fallback' })
+      remarks.push(`${label}：${raw}`)
+    }
+  }
+
+  // 基本信息：追加在原值之后
+  if (basicExtras.length) {
+    buffer.customer_basic_info = appendText(current('customer_basic_info'), basicExtras.join('\n'))
+  }
+  // 备注：追加在原值之后（模型自己的 remark 已在 ANALYSIS_MAPPING 里写入 buffer.remark）
+  if (remarks.length) {
+    buffer.remark = appendText(current('remark'), remarks.join('\n'))
+  }
+
+  // 写入编辑缓冲区，等用户点「保存」落库
+  Object.assign(editBufferMap.value, buffer)
+
+  return items
+}
+
+// 未知 key 的归类：按 key 名里的关键词判断进基本信息还是备注
+function guessFallbackGroup(key) {
+  const name = String(key).toLowerCase()
+  const basicWords = ['address', 'employee', 'staff', 'headcount', 'founded', 'established',
+    'size', 'scale', 'product', 'service', 'scope', 'business', 'parent', 'group',
+    'subsidiary', 'brand', 'website', 'name']
+  if (basicWords.some((w) => name.includes(w))) return 'basic'
+  return 'remark'
 }
 
 // 跳转跟进记录列表页（/crm/follow/record），并按当前客户预置筛选条件
@@ -152,6 +479,11 @@ function isReadonly(field) {
 
 function startEdit(field, value) {
   if (isReadonly(field)) return
+  // 编辑基本信息时退出地址编辑态，两者共用同一个缓冲区
+  if (field === 'customer_basic_info') {
+    addressEditing.value = false
+    basicInfoEditing.value = true
+  }
   // 如果没有修改过，使用原始值初始化
   if (editBufferMap.value[field] === undefined) {
     editBufferMap.value[field] = value ?? ''
@@ -165,6 +497,10 @@ function startEdit(field, value) {
 
 function cancelEdit(field) {
   delete editBufferMap.value[field]
+  if (field === 'customer_basic_info') {
+    addressEditing.value = false
+    basicInfoEditing.value = false
+  }
 }
 
 function isEditing(field) {
@@ -248,6 +584,48 @@ function companySizeLabel() {
   return '—'
 }
 
+/**
+ * 地址：crm_master_data 没有独立的 address 列，地址存在 customer_basic_info
+ * 里的「总部地址：xxx」一行。这里把它抽出来单独展示成「地址」行，
+ * 编辑地址时再合并回 customer_basic_info，两处始终保持一致。
+ */
+const fullBasicInfo = computed(() => {
+  if (editBufferMap.value.customer_basic_info !== undefined) {
+    return editBufferMap.value.customer_basic_info
+  }
+  return detail.value?.customer_basic_info ?? ''
+})
+
+const addressValue = computed({
+  get: () => extractAddress(fullBasicInfo.value).address,
+  set: (val) => {
+    editBufferMap.value.customer_basic_info = mergeAddress(fullBasicInfo.value, val)
+  },
+})
+
+// 基本信息：去掉地址行后的剩余内容
+const basicInfoRest = computed({
+  get: () => extractAddress(fullBasicInfo.value).rest,
+  set: (val) => {
+    // 只替换剩余内容，地址行原样保留
+    const addr = extractAddress(fullBasicInfo.value).address
+    editBufferMap.value.customer_basic_info = mergeAddress(val, addr)
+  },
+})
+
+// 地址是否处于编辑态（与 customer_basic_info 共用同一个编辑缓冲区，
+// 但单独用 addressEditing 标记，避免编辑地址时基本信息也弹出编辑器）
+const isEditingAddress = computed(() => addressEditing.value)
+
+// 编辑地址：进入编辑态时把原值放进编辑缓冲区
+function startEditAddress() {
+  if (isReadonly('customer_basic_info')) return
+  if (editBufferMap.value.customer_basic_info === undefined) {
+    editBufferMap.value.customer_basic_info = detail.value?.customer_basic_info ?? ''
+  }
+  addressEditing.value = true
+}
+
 // 拉取负责人（销售）下拉选项
 async function loadOwnerOptions() {
   const ns = namespaceStore.currentNamespaceId
@@ -295,6 +673,8 @@ async function handleSaveAll() {
     })
     // 清空编辑缓冲区
     editBufferMap.value = {}
+    addressEditing.value = false
+    basicInfoEditing.value = false
   } catch (e) {
     console.error(e)
     ElMessage.error(e?.response?.data?.msg || '保存失败')
@@ -383,21 +763,16 @@ watch(
     <div class="detail-header">
       <el-button type="primary" plain size="small" @click="goBack">返回列表</el-button>
       <span class="detail-title">{{ detail?.company_name || detail?.customer_name || '客户详情' }}</span>
+      <div class="detail-header-actions">
+        <el-button type="primary" size="small" :loading="analyzing" @click="handleDeepAnalysis">
+          深入分析
+        </el-button>
+      </div>
     </div>
 
     <div class="detail-content" v-if="detail">
       <el-descriptions :column="2" border label-width="110px">
         <el-descriptions-item label="客户编号">{{ detail.customer_no || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="公司名称">
-          <span class="cell-field" :class="{ 'is-editing': isEditing('company_name') }">
-            <span class="cell-static">
-              <span class="editable" @dblclick="startEdit('company_name', detail.company_name)">{{ getFieldValue('company_name') || '—' }}</span>
-            </span>
-            <span v-if="isEditing('company_name')" class="cell-editor">
-              <el-input v-model="editBufferMap.company_name" />
-            </span>
-          </span>
-        </el-descriptions-item>
         <el-descriptions-item label="简称">
           <span class="cell-field" :class="{ 'is-editing': isEditing('short_name') }">
             <span class="cell-static">
@@ -408,6 +783,27 @@ watch(
             </span>
           </span>
         </el-descriptions-item>
+        <el-descriptions-item label="公司名称">
+          <span class="cell-field" :class="{ 'is-editing': isEditing('company_name') }">
+            <span class="cell-static">
+              <span class="editable" @dblclick="startEdit('company_name', detail.company_name)">{{ getFieldValue('company_name') || '—' }}</span>
+            </span>
+            <span v-if="isEditing('company_name')" class="cell-editor">
+              <el-input v-model="editBufferMap.company_name" />
+            </span>
+          </span>
+        </el-descriptions-item>
+        <el-descriptions-item label="英文名称">
+          <span class="cell-field" :class="{ 'is-editing': isEditing('company_name_en') }">
+            <span class="cell-static">
+              <span class="editable" @dblclick="startEdit('company_name_en', detail.company_name_en)">{{ getFieldValue('company_name_en') || '—' }}</span>
+            </span>
+            <span v-if="isEditing('company_name_en')" class="cell-editor">
+              <el-input v-model="editBufferMap.company_name_en" />
+            </span>
+          </span>
+        </el-descriptions-item>
+        
         <el-descriptions-item label="客户状态">
           <span class="cell-field" :class="{ 'is-editing': isEditing('status') }">
             <span class="cell-static">
@@ -691,13 +1087,23 @@ watch(
             </span>
           </span>
         </el-descriptions-item>
-        <el-descriptions-item label="基本信息" :span="2">
-          <span class="cell-field is-multiline" :class="{ 'is-editing': isEditing('customer_basic_info') }">
+        <el-descriptions-item label="地址" :span="2">
+          <span class="cell-field" :class="{ 'is-editing': isEditingAddress }">
             <span class="cell-static">
-              <span class="editable editable-multiline" @dblclick="startEdit('customer_basic_info', detail.customer_basic_info)">{{ getFieldValue('customer_basic_info') || '—' }}</span>
+              <span class="editable" @dblclick="startEditAddress">{{ addressValue || '—' }}</span>
             </span>
-            <span v-if="isEditing('customer_basic_info')" class="cell-editor">
-              <el-input v-model="editBufferMap.customer_basic_info" type="textarea" :rows="3" resize="none" class="cell-textarea" />
+            <span v-if="isEditingAddress" class="cell-editor">
+              <el-input v-model="addressValue" placeholder="请输入总部地址" />
+            </span>
+          </span>
+        </el-descriptions-item>
+        <el-descriptions-item label="基本信息" :span="2">
+          <span class="cell-field is-multiline" :class="{ 'is-editing': basicInfoEditing }">
+            <span class="cell-static">
+              <span class="editable editable-multiline" @dblclick="startEdit('customer_basic_info', detail.customer_basic_info)">{{ basicInfoRest || '—' }}</span>
+            </span>
+            <span v-if="basicInfoEditing" class="cell-editor">
+              <el-input v-model="basicInfoRest" type="textarea" :rows="3" resize="none" class="cell-textarea" />
             </span>
           </span>
         </el-descriptions-item>
@@ -788,6 +1194,10 @@ watch(
   font-size: 16px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+}
+
+.detail-header-actions {
+  margin-left: auto;
 }
 
 .detail-content {

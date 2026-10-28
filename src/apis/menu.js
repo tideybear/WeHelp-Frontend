@@ -12,13 +12,3 @@ export const getMenuListAPI = (namespace_id, user_id) => {
   })
 }
 
-export const getNamespaceMenuAPI = ({ userid }) => {
-  return request({
-    url: '/namespace/list',
-    params: {
-      userid
-    }
-  })
-}
-
-

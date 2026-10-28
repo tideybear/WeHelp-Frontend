@@ -160,3 +160,14 @@ export const deleteCrmCustomerProductsAPI = (id) => {
     method: 'DELETE',
   })
 }
+
+
+/** 客户深入分析：后端需调用大模型并抓取官网，耗时较长，单独放宽超时 */
+export const deepAnalysisAPI = (data, timeout = 180000) => {
+  return request({
+    url: `/crm/deep-analysis`,
+    method: 'POST',
+    data: { data: data ?? {} },
+    timeout,
+  })
+}

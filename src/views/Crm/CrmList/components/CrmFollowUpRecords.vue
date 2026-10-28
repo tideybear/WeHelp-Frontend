@@ -70,7 +70,6 @@ async function loadRecords(append = false) {
       page.value = 1
     }
     total.value = Number(result.total ?? 0)
-    console.log(recordList.value)
   } catch (e) {
     console.error('获取跟进记录失败:', e)
     if (!append) {

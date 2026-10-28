@@ -110,10 +110,12 @@ export const COUNTRY_OPTIONS = [
 
 /** 客户性质：沿用后端 sales.py 中 CUSTOMER_TYPE_LABELS 的取值约定 */
 export const CUSTOMER_TYPE_OPTIONS = [
-  { label: '企业', value: 1 },
-  { label: '个人', value: 2 },
-  { label: '政府机构', value: 3 },
-  { label: '事业单位', value: 4 },
+  { label: '生产型企业', value: 1 },
+  { label: '贸易型企业', value: 2 },
+  { label: '服务型企业', value: 3 },
+  { label: '政府机构', value: 4 },
+  { label: '个人', value: 5 }
+  
 ]
 
 /** 行业：sys_dict 暂无对应字典，按常见外贸行业给出可选值 */
@@ -206,4 +208,224 @@ export function formatDateTime(value) {
     return text
   }
   return text.replace('T', ' ').slice(0, 16)
+}
+
+// ————————————————————————————————————————————————
+// 深入分析（DeepSeek）结果 → 客户详情表单字段的映射
+// ————————————————————————————————————————————————
+//
+// 后端 /crm/deep-analysis 返回的是一组「信息项」（company_name、business_scope、
+// key_contacts ...），与客户详情页的表单字段（crm_master_data）不是一一对应。
+// 这里的规则把两边对齐：
+//
+// 1. 能对上表单字段的 → 写入对应字段（有原值时追加在原值之后，不覆盖原值）；
+// 2. 对不上表单字段的 → 按内容性质打包进「基本信息」或「备注」；
+// 3. 写不进去的（数量型、下拉型与原值冲突等）→ 记入备注并在结果面板里标注。
+
+/** 深入分析结果的中文字段名（与后端 ANALYSIS_FIELDS 保持一致） */
+export const ANALYSIS_LABELS = {
+  company_name: '公司名称',
+  company_name_en: '公司英文名称',
+  short_name: '公司简称',
+  company_type: '企业类型',
+  website: '公司官网',
+  country: '国家/地区',
+  country_cn: '国家/地区（中文）',
+  region: '所属地区',
+  address: '总部地址',
+  founded_year: '成立年份',
+  industry: '所属行业',
+  industry_cn: '所属行业（中文）',
+  business_scope: '主营业务介绍',
+  main_products: '主要产品/服务',
+  company_size: '企业规模',
+  employee_count: '员工人数',
+  company_revenue: '年营业额',
+  revenue_currency: '营收币种',
+  parent_company: '母公司/所属集团',
+  listing_status: '上市情况',
+  export_markets: '主要市场/出口地区',
+  certifications: '资质与认证',
+  customer_needs: '采购需求分析',
+  competitive_advantages: '竞争优势',
+  key_contacts: '关键联系人',
+  follow_up_strategy: '跟进策略',
+  remark: '备注',
+}
+
+/**
+ * 能与表单字段对应的分析项。
+ * type:
+ *  - text / multiline：文本，直接追加到目标字段
+ *  - website：网址，单值字段，用「、」分隔追加
+ *  - revenue：数量型，数值写入，单位说明打包进基本信息
+ *  - enum：下拉型，用 label 反查 option.value；查不到则退回基本信息
+ */
+export const ANALYSIS_MAPPING = [
+  { key: 'company_name', label: '公司名称', target: 'company_name', type: 'text', targetLabel: '公司名称' },
+  { key: 'company_name_en', label: '公司英文名称', target: 'company_name_en', type: 'text', targetLabel: '英文名称' },
+  { key: 'short_name', label: '公司简称', target: 'short_name', type: 'text', targetLabel: '简称' },
+  { key: 'website', label: '公司官网', target: 'website', type: 'website', targetLabel: '网址' },
+  {
+    key: 'company_type',
+    label: '企业类型',
+    target: 'customer_type_id',
+    type: 'enum',
+    options: 'CUSTOMER_TYPE_OPTIONS',
+    targetLabel: '客户性质',
+  },
+  {
+    key: 'country_cn',
+    label: '国家/地区（中文）',
+    target: 'country_id',
+    type: 'enum',
+    options: 'COUNTRY_OPTIONS',
+    fallbackKey: 'country',
+    targetLabel: '国家',
+  },
+  {
+    key: 'region',
+    label: '所属地区',
+    target: 'region_id',
+    type: 'enum',
+    options: 'REGION_OPTIONS',
+    targetLabel: '区域',
+  },
+  {
+    key: 'industry_cn',
+    label: '所属行业（中文）',
+    target: 'industry_id',
+    type: 'enum',
+    options: 'INDUSTRY_OPTIONS',
+    fallbackKey: 'industry',
+    targetLabel: '行业',
+  },
+  { key: 'company_revenue', label: '年营业额', target: 'company_revenue', type: 'revenue', targetLabel: '销售额' },
+  { key: 'revenue_currency', label: '营收币种', target: null, type: 'remark', targetLabel: '备注' },
+  { key: 'address', label: '总部地址', target: 'address', type: 'address', targetLabel: '地址' },
+  { key: 'customer_needs', label: '采购需求分析', target: 'customer_needs', type: 'multiline', targetLabel: '客户需求' },
+  { key: 'follow_up_strategy', label: '跟进策略', target: 'follow_up_strategy', type: 'multiline', targetLabel: '跟进策略' },
+  { key: 'remark', label: '备注', target: 'remark', type: 'multiline', targetLabel: '备注' },
+]
+
+/** 没有对应表单字段，打包进「基本信息」的信息项 */
+export const BASIC_INFO_KEYS = [
+  'business_scope',
+  'main_products',
+  'founded_year',
+  'employee_count',
+  'company_size',
+  'parent_company',
+]
+
+/** 没有对应表单字段，打包进「备注」的信息项 */
+export const REMARK_KEYS = [
+  'certifications',
+  'competitive_advantages',
+  'key_contacts',
+  'listing_status',
+  'export_markets',
+]
+
+/**
+ * 兜底分组：ANALYSIS_MAPPING / BASIC_INFO_KEYS / REMARK_KEYS 都没覆盖到的 key，
+ * 按 key 名归类到基本信息或备注，保证后端新增字段时不会漏掉。
+ * value 为分组名，'basic' = 基本信息，'remark' = 备注。
+ */
+export const ANALYSIS_FALLBACK_GROUP = {
+  currency: 'remark',
+  revenue: 'remark',
+  address: 'basic',
+  employee: 'basic',
+  employees: 'basic',
+  staff: 'basic',
+  headcount: 'basic',
+  founded: 'basic',
+  established: 'basic',
+  year: 'basic',
+  size: 'basic',
+  scale: 'basic',
+  product: 'basic',
+  service: 'basic',
+  scope: 'basic',
+  business: 'basic',
+  parent: 'basic',
+  group: 'basic',
+  subsidiary: 'basic',
+  brand: 'basic',
+  market: 'remark',
+  export: 'remark',
+  certificate: 'remark',
+  certification: 'remark',
+  contact: 'remark',
+  person: 'remark',
+  ceo: 'remark',
+  cto: 'remark',
+  listing: 'remark',
+  stock: 'remark',
+  ticker: 'remark',
+  advantage: 'remark',
+  strength: 'remark',
+  risk: 'remark',
+  note: 'remark',
+  remark: 'remark',
+}
+
+/** 文本追加：空则直接写；已有相同内容不重复追加；否则换行追加在原值之后 */
+export function appendText(original, addition) {
+  const a = original == null ? '' : String(original).trim()
+  const b = addition == null ? '' : String(addition).trim()
+  if (!b) return a
+  if (!a) return b
+  if (a.includes(b)) return a
+  return `${a}\n${b}`
+}
+
+/** 按 label 反查下拉选项的 value */
+export function labelToValue(options, label) {
+  if (label == null || label === '') return null
+  const text = String(label).trim()
+  const found = options.find((o) => o.label === text)
+  if (found) return found.value
+  const loose = options.find((o) => String(o.label).includes(text) || text.includes(String(o.label)))
+  return loose ? loose.value : null
+}
+
+/** 「总部地址：xxx」这类以中文冒号开头的行前缀 */
+export const ADDRESS_LINE_PREFIX = '总部地址：'
+
+/**
+ * 从 customer_basic_info 里拆出「总部地址」这一行。
+ *
+ * crm_master_data 表里没有独立的 address 列，地址是存在 customer_basic_info
+ * 文本中的一行（形如「总部地址：xxx」）。这里把它单独抽出来展示成「地址」行，
+ * 剩下的内容继续留在「基本信息」里。
+ */
+export function extractAddress(basicInfo) {
+  if (basicInfo == null || basicInfo === '') return { address: '', rest: '' }
+  const lines = String(basicInfo).split('\n')
+  const addressLines = []
+  const restLines = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith(ADDRESS_LINE_PREFIX) || trimmed.startsWith('地址：')) {
+      addressLines.push(trimmed.replace(/^(总部地址|地址)：/, '').trim())
+    } else {
+      restLines.push(line)
+    }
+  }
+  return {
+    address: addressLines.filter(Boolean).join('、'),
+    rest: restLines.join('\n'),
+  }
+}
+
+/**
+ * 把地址写回 customer_basic_info：移除旧的地址行，把新地址作为首行插回去。
+ */
+export function mergeAddress(basicInfo, address) {
+  const { rest } = extractAddress(basicInfo)
+  const addr = address == null ? '' : String(address).trim()
+  if (!addr) return rest
+  return `${ADDRESS_LINE_PREFIX}${addr}\n${rest}`.replace(/\n+$/, '')
 }
