@@ -31,6 +31,10 @@ import {
   labelToValue,
   extractAddress,
   mergeAddress,
+  formatAmount,
+  normalizeCurrency,
+  extractCurrency,
+  CURRENCY_OPTIONS,
 } from './shared'
 
 defineOptions({ name: 'CrmCustomerDetailDefault' })
@@ -317,10 +321,15 @@ function applyAnalysisResult(result) {
     }
 
     if (rule.type === 'revenue') {
-      // 营收：模型常给「1.27」+ 币种（USD），实际单位多半是十亿（billion）。
-      // 表里的 company_revenue 是无单位的数值，这里原样写入数值，
-      // 并把单位存疑的提示写进备注，避免数值被误读。
-      const num = Number(String(raw).replace(/[^\d.]/g, ''))
+      // 营收：模型常给「1.27 billion USD」这类带单位/币种的文本，
+      // 表里的 company_revenue 是无单位的数值，这里抽出数值写入，
+      // 同时把币种写进 revenue_currency（币种独立成字段，不混在数值里）。
+      const text = String(raw)
+      const num = Number(text.replace(/[^\d.]/g, ''))
+      // 币种优先取分析结果里的 revenue_currency，没有就从营收文本里解析
+      const currency = normalizeCurrency(
+        result.revenue_currency || extractCurrency(text) || ''
+      )
       if (Number.isNaN(num)) {
         items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'fallback' })
         basicExtras.push(`${rule.label}：${raw}`)
@@ -334,8 +343,34 @@ function applyAnalysisResult(result) {
           items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
         }
       }
+      // 币种写入 revenue_currency（原值不同则保留原值并提示核实）
+      if (currency) {
+        const oldCurrency = current('revenue_currency')
+        if (oldCurrency != null && oldCurrency !== '' && normalizeCurrency(oldCurrency) !== currency) {
+          items.push({ label: '营收币种', value: currency, target: '币种', type: 'conflict' })
+          remarks.push(`营收币种：分析结果为 ${currency}，当前值为 ${oldCurrency}，请核实。`)
+        } else if (oldCurrency == null || oldCurrency === '') {
+          buffer.revenue_currency = currency
+          items.push({ label: '营收币种', value: currency, target: '币种', type: 'field' })
+        }
+      }
       if (num < 1000) {
         remarks.push(`${rule.label}原始值 ${raw}，单位请核实（可能是十亿/百万）`)
+      }
+      continue
+    }
+
+    if (rule.type === 'currency') {
+      // 币种：写入 revenue_currency，与销售额绑定展示
+      const code = normalizeCurrency(raw)
+      if (!code) continue
+      const old = current(rule.target)
+      if (old != null && old !== '' && normalizeCurrency(old) !== code) {
+        items.push({ label: rule.label, value: code, target: rule.targetLabel, type: 'conflict' })
+        remarks.push(`${rule.label}：分析结果为 ${code}，当前值为 ${old}，请核实。`)
+      } else {
+        buffer[rule.target] = code
+        items.push({ label: rule.label, value: code, target: rule.targetLabel, type: 'field' })
       }
       continue
     }
@@ -493,6 +528,10 @@ function startEdit(field, value) {
   if (field === 'company_size_min' && editBufferMap.value.company_size_max === undefined) {
     editBufferMap.value.company_size_max = detail.value?.company_size_max ?? null
   }
+  // 销售额与币种是同一格，一起进入编辑态，币种下拉才有初值
+  if (field === 'company_revenue' && editBufferMap.value.revenue_currency === undefined) {
+    editBufferMap.value.revenue_currency = detail.value?.revenue_currency ?? ''
+  }
 }
 
 function cancelEdit(field) {
@@ -568,10 +607,31 @@ function dateLabel(field, withTime = false) {
 }
 
 // 金额展示文案（编辑缓冲优先）
+// 带币种：销售额用 revenue_currency，首年/三年潜力用 potential_currency
 function amountLabel(field) {
   const raw = getFieldValue(field)
   if (raw == null || raw === '') return '—'
-  return String(raw)
+  return formatAmount(raw, currencyOf(field))
+}
+
+// 金额字段对应的币种字段
+function currencyFieldOf(field) {
+  if (field === 'company_revenue') return 'revenue_currency'
+  if (field === 'first_year_sales_potential' || field === 'third_year_sales_potential') {
+    return 'potential_currency'
+  }
+  return ''
+}
+
+// 当前金额对应的币种（编辑缓冲优先），没有则回退到营收币种
+function currencyOf(field) {
+  const currencyField = currencyFieldOf(field)
+  if (currencyField) {
+    const value = getFieldValue(currencyField)
+    if (value != null && value !== '') return value
+  }
+  const fallback = getFieldValue('revenue_currency')
+  return fallback == null ? '' : fallback
 }
 
 // 公司规模展示文案：区间优先，其次字典 id
@@ -940,11 +1000,11 @@ watch(
           </span>
         </el-descriptions-item>
         <el-descriptions-item label="销售额">
-          <span class="cell-field" :class="{ 'is-editing': isEditing('company_revenue') }">
+          <span class="cell-field" :class="{ 'is-editing': isEditing('company_revenue') || isEditing('revenue_currency') }">
             <span class="cell-static">
               <span class="editable" @dblclick="startEdit('company_revenue', detail.company_revenue ?? '')">{{ amountLabel('company_revenue') }}</span>
             </span>
-            <span v-if="isEditing('company_revenue')" class="cell-editor">
+            <span v-if="isEditing('company_revenue') || isEditing('revenue_currency')" class="cell-editor">
               <el-input-number
               v-model="editBufferMap.company_revenue"
               :min="0"
@@ -953,6 +1013,21 @@ watch(
               placeholder="请输入销售额"
               class="cell-number"
               />
+              <el-select
+              v-model="editBufferMap.revenue_currency"
+              placeholder="请选择币种"
+              class="cell-select cell-currency"
+              filterable
+              allow-create
+              default-first-option
+              >
+              <el-option
+              v-for="opt in CURRENCY_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+              />
+              </el-select>
             </span>
           </span>
         </el-descriptions-item>
@@ -1367,6 +1442,13 @@ watch(
 // 数字输入框撑满单元格
 .cell-number {
   width: 100%;
+}
+
+// 币种下拉：与销售额同格展示，固定一个窄宽度
+.cell-currency {
+  width: 110px !important;
+  flex: 0 0 110px;
+  margin-left: 6px;
 }
 
 // 日期选择器撑满单元格

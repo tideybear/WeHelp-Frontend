@@ -153,6 +153,103 @@ export const YES_NO_OPTIONS = [
   { label: '否', value: 0 },
 ]
 
+/** 币种选项（与 crm_master_data.revenue_currency / potential_currency 取值一致） */
+export const CURRENCY_OPTIONS = [
+  { label: '人民币 CNY', value: 'CNY' },
+  { label: '美元 USD', value: 'USD' },
+  { label: '欧元 EUR', value: 'EUR' },
+  { label: '英镑 GBP', value: 'GBP' },
+  { label: '日元 JPY', value: 'JPY' },
+  { label: '迪拉姆 AED', value: 'AED' },
+  { label: '卢比 INR', value: 'INR' },
+]
+
+/** 币种符号（没有符号的币种直接跟在数值后面） */
+const CURRENCY_SYMBOLS = {
+  CNY: '¥',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  INR: '₹',
+}
+
+/** 币种别名 / 符号 → 标准币种代码 */
+const CURRENCY_ALIASES = {
+  $: 'USD',
+  '＄': 'USD',
+  '¥': 'CNY',
+  '￥': 'CNY',
+  '€': 'EUR',
+  '£': 'GBP',
+  '₹': 'INR',
+  RMB: 'CNY',
+  CNY: 'CNY',
+  USD: 'USD',
+  EUR: 'EUR',
+  GBP: 'GBP',
+  JPY: 'JPY',
+  AED: 'AED',
+  INR: 'INR',
+  人民币: 'CNY',
+  美元: 'USD',
+  美金: 'USD',
+  欧元: 'EUR',
+  英镑: 'GBP',
+  日元: 'JPY',
+  迪拉姆: 'AED',
+  卢比: 'INR',
+}
+
+/**
+ * 币种归一化：把「美元 / USD / $ / 美元 USD」这类写法统一成标准币种代码。
+ * 取不到标准代码时原样返回（保留后端自定义币种）。
+ */
+export function normalizeCurrency(value) {
+  if (value == null || value === '') return ''
+  const text = String(value).trim()
+  if (!text) return ''
+  const upper = text.toUpperCase()
+  if (CURRENCY_OPTIONS.some((o) => o.value === upper)) return upper
+  const alias = CURRENCY_ALIASES[text] || CURRENCY_ALIASES[upper]
+  if (alias) return alias
+  const opt = CURRENCY_OPTIONS.find((o) => o.label.includes(text) || text.includes(o.label))
+  if (opt) return opt.value
+  if (/^[A-Z]{3}$/.test(upper)) return upper
+  return text
+}
+
+/**
+ * 金额展示：数值 + 币种（币种可为空，此时只展示数值）。
+ * 例：1234.5 + USD → $1,234.5；1234.5 + AED → AED 1,234.5
+ */
+export function formatAmount(value, currency) {
+  if (value == null || value === '') return '—'
+  const num = Number(value)
+  const code = normalizeCurrency(currency)
+  if (Number.isNaN(num)) return code ? `${value} ${code}` : String(value)
+  const text = num.toLocaleString()
+  if (!code) return text
+  const symbol = CURRENCY_SYMBOLS[code]
+  return symbol ? `${symbol}${text}` : `${text} ${code}`
+}
+
+/**
+ * 从「1.27 billion USD」「$1.2B」这类营收文本里抽出币种，
+ * 用于后端只返回带单位的数值、没有单独给币种字段的场景。
+ */
+export function extractCurrency(text) {
+  if (text == null || text === '') return ''
+  const s = String(text)
+  const aliasMatch = s.match(/(人民币|美元|美金|欧元|英镑|日元|迪拉姆|卢比)/)
+  if (aliasMatch) return normalizeCurrency(aliasMatch[1])
+  const symbolMatch = s.match(/[$€£¥₹]/)
+  if (symbolMatch) return normalizeCurrency(symbolMatch[0])
+  const codeMatch = s.match(/\b[A-Z]{3}\b/)
+  if (codeMatch) return normalizeCurrency(codeMatch[0])
+  return ''
+}
+
 /**
  * 按 options 取展示名，取不到时回退为原始值。
  * 后端返回的 *_id 可能是字符串，这里统一按数值比较。
@@ -301,7 +398,7 @@ export const ANALYSIS_MAPPING = [
     targetLabel: '行业',
   },
   { key: 'company_revenue', label: '年营业额', target: 'company_revenue', type: 'revenue', targetLabel: '销售额' },
-  { key: 'revenue_currency', label: '营收币种', target: null, type: 'remark', targetLabel: '备注' },
+  { key: 'revenue_currency', label: '营收币种', target: 'revenue_currency', type: 'currency', targetLabel: '币种' },
   { key: 'address', label: '总部地址', target: 'address', type: 'address', targetLabel: '地址' },
   { key: 'customer_needs', label: '采购需求分析', target: 'customer_needs', type: 'multiline', targetLabel: '客户需求' },
   { key: 'follow_up_strategy', label: '跟进策略', target: 'follow_up_strategy', type: 'multiline', targetLabel: '跟进策略' },
