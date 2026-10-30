@@ -2,13 +2,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MagicStick } from '@element-plus/icons-vue'
 import { getCrmCustomerDetailAPI, updateCrmCustomerAPI, deleteCrmCustomerAPI, getCrmCustomerFollowUpRecordAPI, deepAnalysisAPI } from '@/apis/crm'
 import { getUserListAPI } from '@/apis/user'
 import { useNamespace } from '@/stores/namespaceStore'
 import CrmCustomerContacts from './CrmCustomerContacts.vue'
 import CrmFollowUpRecords from './CrmFollowUpRecords.vue'
 import CrmCustomerProducts from './CrmCustomerProducts.vue'
+import { COMPANY_SIZE_OPTIONS } from '@/views/Crm/CrmFollowUpRecords/components/shared'
 import {
   CUSTOMER_STATUS_OPTIONS,
   SOURCE_OPTIONS,
@@ -27,8 +27,9 @@ import {
   BASIC_INFO_KEYS,
   REMARK_KEYS,
   ANALYSIS_FALLBACK_GROUP,
-  appendText,
   labelToValue,
+  readLabeledLine,
+  applyLabeledLines,
   extractAddress,
   mergeAddress,
   formatAmount,
@@ -52,8 +53,7 @@ const addressEditing = ref(false) // 「地址」行是否处于编辑态（与�
 const basicInfoEditing = ref(false) // 「基本信息」行是否处于编辑态
 
 // 深入分析结果面板
-const analysisVisible = ref(false)
-const analysisResult = ref([]) // [{ label, value, target, type }]
+const analysisResult = ref([]) // [{ label, target, type, oldValue, newValue }]
 
 // 下拉选项注册表：深入分析按 label 反查 value
 const OPTION_REGISTRY = {
@@ -61,6 +61,7 @@ const OPTION_REGISTRY = {
   COUNTRY_OPTIONS,
   REGION_OPTIONS,
   INDUSTRY_OPTIONS,
+  COMPANY_SIZE_OPTIONS,
 }
 
 // 负责人（销售）下拉选项
@@ -96,6 +97,7 @@ const ID_FIELDS = [
   'country_id',
   'customer_type_id',
   'industry_id',
+  'company_size_id',
   'follow_up_status_id',
   'owner_id',
 ]
@@ -110,14 +112,6 @@ function statusTagType(value) {
     case 5: return 'info'
     default: return 'info'
   }
-}
-
-// 深入分析结果条目的标签配色
-// field：已填入对应字段；fallback：打包进基本信息/备注；conflict：与原值冲突，仅记录待核实
-function analysisTagType(type) {
-  if (type === 'conflict') return 'warning'
-  if (type === 'fallback') return 'info'
-  return 'success'
 }
 
 // 状态 id 归一化为数字，避免后端返回字符串导致下拉框匹配不到 option
@@ -174,6 +168,11 @@ function goBack() {
 
 // 深入分析：把页面上的指定字段与所有跟进记录内容合并打包成 JSON 并打印到控制台
 async function handleDeepAnalysis() {
+  // 已有请求进行中时直接返回，保证「深入分析」只发一次 API 请求
+  // （loading 标记要在任何 await 之前置位，否则等待期间的重复点击会并发发起请求）
+  if (analyzing.value) return
+  analyzing.value = true
+
   const customerId = detail.value?.id ?? recordId.value
 
   // 取字段值（优先使用编辑缓冲区的值，否则使用原始值）
@@ -237,14 +236,12 @@ async function handleDeepAnalysis() {
   console.log('[深入分析] 客户数据打包结果:', JSON.stringify(payload, null, 2))
 
   // 调用深入分析接口（后端耗时较长，超时放宽到 180s）
-  analyzing.value = true
   try {
     const res = await deepAnalysisAPI(payload, 180000)
     console.log('[深入分析] 接口返回结果:', res)
     const result = res?.result ?? res ?? {}
     const mapped = applyAnalysisResult(result)
     analysisResult.value = mapped
-    analysisVisible.value = true
     ElMessage.success('深入分析完成')
     return res
   } catch (e) {
@@ -261,16 +258,22 @@ async function handleDeepAnalysis() {
 }
 
 /**
- * 把深入分析结果落到客户详情表单：
- * - 能对应上表单字段的 → 追加到该字段原值之后；
- * - 对应不上的 → 按性质打包进「基本信息」或「备注」；
- * - 全部写入 editBufferMap，等用户点「保存」才落库。
+ * 把深入分析结果落到客户详情表单。
+ *
+ * 写入口径：
+ * - 字段原值为空 → 直接填入分析结果；
+ * - 字段原值有值 → 直接替换（不是在原值后面追加）；
+ * - 多行文本容器（基本信息 / 备注）→ 按「标签」在内容中定位并替换对应行，
+ *   没有同名标签才新增一行。
+ *
+ * 所有改动都写入 editBufferMap，等用户点「保存」才落库；
+ * 同时返回逐条的「标签 / 原值 -> 新值」列表，用于结果面板展示。
  */
 function applyAnalysisResult(result) {
-  const items = []      // 面板展示：{ label, value, target, type }
+  const items = []      // 面板展示：{ label, target, type, oldValue, newValue }
   const buffer = {}     // 待写入编辑缓冲区的字段
-  const remarks = []    // 需要追加到备注里的内容
-  const basicExtras = [] // 需要追加到基本信息里的内容
+  const basicEntries = []  // 写入「基本信息」的条目：{ label, value, target }
+  const remarkEntries = [] // 写入「备注」的条目：{ label, value, target }
 
   // 当前值：本次已写入 buffer 的优先，其次编辑缓冲区，最后原始数据
   const current = (field) => {
@@ -279,8 +282,50 @@ function applyAnalysisResult(result) {
     return detail.value?.[field]
   }
 
-  const setField = (field, value) => {
-    buffer[field] = appendText(current(field), value)
+  /**
+   * 记录一条改动：
+   * - 原值为空 → fill（新增）
+   * - 原值有值 → replace（原值 -> 新值）
+   * - 两边相同 → same（无需改动）
+   */
+  const record = (label, targetLabel, oldValue, newValue) => {
+    const oldText = oldValue == null ? '' : String(oldValue)
+    const newText = newValue == null ? '' : String(newValue)
+    const type = oldText === newText ? 'same' : (oldText ? 'replace' : 'fill')
+    items.push({ label, target: targetLabel, type, oldValue: oldText, newValue: newText })
+    return type
+  }
+
+  /**
+   * 写入表单字段：
+   * - 原值为空 → 直接填入；
+   * - 原值有值且不同 → 直接替换；
+   * - 与原值相同 → 不动（不标记为已修改）。
+   *
+   * oldDisplay / newDisplay 是面板上展示用的文案（如下拉项显示 label），
+   * 与实际存储的 value 分开，避免 id 与文案混淆。
+   * isSame 可自定义「是否相同」的判断（如数值与带单位文案的比较）。
+   */
+  const setField = (field, value, label, targetLabel, oldDisplay, newDisplay, isSame) => {
+    const old = current(field)
+    const oldText = oldDisplay != null ? oldDisplay : (old == null ? '' : String(old))
+    const newText = newDisplay != null ? newDisplay : (value == null ? '' : String(value))
+    // 展示文案一致即认为值没变，不写入缓冲区
+    const same = isSame ? isSame(old, value) : oldText === newText
+    if (!same) {
+      buffer[field] = value
+    }
+    record(label, targetLabel, oldText, newText)
+  }
+
+  /** 记录一条「打包进基本信息/备注」的条目，最终由 applyLabeledLines 统一落盘 */
+  const pushBasic = (label, value, target = '基本信息') => {
+    if (value == null || String(value).trim() === '') return
+    basicEntries.push({ label, value, target })
+  }
+  const pushRemark = (label, value, target = '备注') => {
+    if (value == null || String(value).trim() === '') return
+    remarkEntries.push({ label, value, target })
   }
 
   for (const rule of ANALYSIS_MAPPING) {
@@ -294,27 +339,20 @@ function applyAnalysisResult(result) {
       if (label == null || label === '') continue
       const value = labelToValue(options, label)
       if (value == null) {
-        // 下拉里没有对应项：退回到文本形式，打包进基本信息
-        items.push({ label: rule.label, value: label, target: '基本信息', type: 'fallback' })
-        basicExtras.push(`${rule.label}：${label}`)
+        // 下拉里没有对应项：退回到文本形式，按标签写进基本信息
+        pushBasic(rule.label, label)
       } else {
         const old = current(rule.target)
-        // 已有不同的值 → 保留原值，新值写进备注，避免覆盖用户/历史数据
-        if (old != null && old !== '' && String(old) !== String(value)) {
-          items.push({ label: rule.label, value: label, target: rule.targetLabel, type: 'conflict' })
-          remarks.push(`${rule.label}：分析结果为「${label}」，与当前值（${optionLabel(options, old)}）不一致，请核实。`)
-        } else {
-          buffer[rule.target] = value
-          items.push({ label: rule.label, value: label, target: rule.targetLabel, type: 'field' })
-        }
+        const oldLabel = old == null || old === '' ? '' : optionLabel(options, old)
+        // 有原值 → 直接替换成分析结果；原值为空 → 直接填入
+        setField(rule.target, value, rule.label, rule.targetLabel, oldLabel, label)
       }
       // 备用字段（如英文国名 country / 英文行业 industry）单独保留一条，
       // 避免模型返回的英文原文被丢掉
       if (rule.fallbackKey) {
         const alt = result[rule.fallbackKey]
         if (alt != null && alt !== '' && String(alt) !== String(label)) {
-          items.push({ label: rule.label + '（原文）', value: alt, target: '基本信息', type: 'fallback' })
-          basicExtras.push(`${rule.label}（原文）：${alt}`)
+          pushBasic(`${rule.label}（原文）`, alt)
         }
       }
       continue
@@ -331,31 +369,30 @@ function applyAnalysisResult(result) {
         result.revenue_currency || extractCurrency(text) || ''
       )
       if (Number.isNaN(num)) {
-        items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'fallback' })
-        basicExtras.push(`${rule.label}：${raw}`)
+        pushBasic(rule.label, text)
       } else {
         const old = current(rule.target)
-        if (old != null && old !== '') {
-          items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'conflict' })
-          remarks.push(`${rule.label}：分析结果为 ${raw}，当前值为 ${old}，请核实。`)
-        } else {
-          buffer[rule.target] = num
-          items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
-        }
+        // 有原值 → 直接替换；原值为空 → 直接填入
+        // 原值是数值、新值是「1.27 billion USD」这类带单位文案，数值相同即视为没变
+        setField(
+          rule.target,
+          num,
+          rule.label,
+          rule.targetLabel,
+          old == null || old === '' ? '' : old,
+          text,
+          (o) => o != null && o !== '' && Number(o) === num
+        )
       }
-      // 币种写入 revenue_currency（原值不同则保留原值并提示核实）
+      // 币种写入 revenue_currency（有原值则替换）
       if (currency) {
         const oldCurrency = current('revenue_currency')
-        if (oldCurrency != null && oldCurrency !== '' && normalizeCurrency(oldCurrency) !== currency) {
-          items.push({ label: '营收币种', value: currency, target: '币种', type: 'conflict' })
-          remarks.push(`营收币种：分析结果为 ${currency}，当前值为 ${oldCurrency}，请核实。`)
-        } else if (oldCurrency == null || oldCurrency === '') {
-          buffer.revenue_currency = currency
-          items.push({ label: '营收币种', value: currency, target: '币种', type: 'field' })
-        }
+        setField('revenue_currency', currency, '营收币种', '币种', oldCurrency == null ? '' : oldCurrency, currency)
       }
       if (num < 1000) {
-        remarks.push(`${rule.label}原始值 ${raw}，单位请核实（可能是十亿/百万）`)
+        // 单位存疑：不覆盖字段，改为按标签写进备注提示核实
+        const note = `${rule.label}原始值 ${raw}，单位请核实（可能是十亿/百万）`
+        pushRemark(`${rule.label}（单位待核实）`, note)
       }
       continue
     }
@@ -365,71 +402,48 @@ function applyAnalysisResult(result) {
       const code = normalizeCurrency(raw)
       if (!code) continue
       const old = current(rule.target)
-      if (old != null && old !== '' && normalizeCurrency(old) !== code) {
-        items.push({ label: rule.label, value: code, target: rule.targetLabel, type: 'conflict' })
-        remarks.push(`${rule.label}：分析结果为 ${code}，当前值为 ${old}，请核实。`)
-      } else {
-        buffer[rule.target] = code
-        items.push({ label: rule.label, value: code, target: rule.targetLabel, type: 'field' })
-      }
+      setField(rule.target, code, rule.label, rule.targetLabel, old == null ? '' : old, code)
       continue
     }
 
     if (rule.type === 'number') {
       const num = Number(String(raw).replace(/[^\d.]/g, ''))
-      const old = current(rule.target)
-      if (old != null && old !== '') {
-        items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'conflict' })
-        remarks.push(`${rule.label}：分析结果为 ${raw}，当前值为 ${old}，请核实。`)
-        continue
-      }
       if (Number.isNaN(num)) {
-        items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'fallback' })
-        basicExtras.push(`${rule.label}：${raw}`)
+        pushBasic(rule.label, raw)
         continue
       }
-      buffer[rule.target] = num
-      items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+      const old = current(rule.target)
+      setField(rule.target, num, rule.label, rule.targetLabel, old == null || old === '' ? '' : old, String(raw))
       continue
     }
 
     if (rule.type === 'address') {
       // 地址存放在 customer_basic_info 的「总部地址：xxx」一行里，
-      // 单独抽出成「地址」行展示，不混进基本信息的正文。
-      const old = extractAddress(current('customer_basic_info')).address
-      if (old && old !== raw) {
-        // 已有地址且不一致 → 保留原地址，新地址写进备注提示核实
-        items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'conflict' })
-        remarks.push(`${rule.label}：分析结果为「${raw}」，与当前值（${old}）不一致，请核实。`)
-        continue
-      }
-      buffer.customer_basic_info = mergeAddress(current('customer_basic_info'), raw)
-      items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+      // 直接按标签定位并替换那一行（mergeAddress 会把旧的地址行摘掉再写回）。
+      const before = current('customer_basic_info')
+      const old = extractAddress(before).address
+      const next = mergeAddress(before, String(raw).trim())
+      if (next !== before) buffer.customer_basic_info = next
+      record(rule.label, rule.targetLabel, old, String(raw).trim())
       continue
     }
 
     if (rule.type === 'remark') {
-      // 没有对应表单字段，直接打包进备注
-      items.push({ label: rule.label, value: raw, target: '备注', type: 'fallback' })
-      remarks.push(`${rule.label}：${raw}`)
+      // 没有对应表单字段，按标签写进备注
+      pushRemark(rule.label, raw)
       continue
     }
 
     if (rule.type === 'website') {
-      // 网址是单值字段，已有值时用「、」分隔追加，不换行（换行会破坏可点击性）
-      const oldText = String(current(rule.target) ?? '').trim()
-      if (!oldText) {
-        buffer[rule.target] = raw
-      } else if (!oldText.includes(raw)) {
-        buffer[rule.target] = `${oldText}、${raw}`
-      }
-      items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+      // 网址是单值字段：有原值 → 直接替换；原值为空 → 直接填入
+      const old = current(rule.target)
+      setField(rule.target, String(raw).trim(), rule.label, rule.targetLabel, old == null ? '' : old, String(raw).trim())
       continue
     }
 
-    // text / multiline
-    setField(rule.target, raw)
-    items.push({ label: rule.label, value: raw, target: rule.targetLabel, type: 'field' })
+    // text / multiline：有原值 → 直接替换；原值为空 → 直接填入
+    const old = current(rule.target)
+    setField(rule.target, String(raw).trim(), rule.label, rule.targetLabel, old == null ? '' : old, String(raw).trim())
   }
 
   // 没有对应表单字段的信息项
@@ -443,15 +457,13 @@ function applyAnalysisResult(result) {
     consumed.add(key)
     const raw = result[key]
     if (raw == null || raw === '') continue
-    items.push({ label: ANALYSIS_LABELS[key] || key, value: raw, target: '基本信息', type: 'fallback' })
-    basicExtras.push(`${ANALYSIS_LABELS[key] || key}：${raw}`)
+    pushBasic(ANALYSIS_LABELS[key] || key, raw)
   }
   for (const key of REMARK_KEYS) {
     consumed.add(key)
     const raw = result[key]
     if (raw == null || raw === '') continue
-    items.push({ label: ANALYSIS_LABELS[key] || key, value: raw, target: '备注', type: 'fallback' })
-    remarks.push(`${ANALYSIS_LABELS[key] || key}：${raw}`)
+    pushRemark(ANALYSIS_LABELS[key] || key, raw)
   }
 
   // 兜底：规则表没覆盖到的 key（后端新增字段等）也要落到基本信息/备注，
@@ -462,21 +474,32 @@ function applyAnalysisResult(result) {
     const label = ANALYSIS_LABELS[key] || key
     const group = ANALYSIS_FALLBACK_GROUP[key] || guessFallbackGroup(key)
     if (group === 'basic') {
-      items.push({ label, value: raw, target: '基本信息', type: 'fallback' })
-      basicExtras.push(`${label}：${raw}`)
+      pushBasic(label, raw)
     } else {
-      items.push({ label, value: raw, target: '备注', type: 'fallback' })
-      remarks.push(`${label}：${raw}`)
+      pushRemark(label, raw)
     }
   }
 
-  // 基本信息：追加在原值之后
-  if (basicExtras.length) {
-    buffer.customer_basic_info = appendText(current('customer_basic_info'), basicExtras.join('\n'))
+  // 基本信息 / 备注：按标签在内容中定位并替换同名行，没有同名标签才新增一行
+  if (basicEntries.length) {
+    const before = current('customer_basic_info')
+    const { content } = applyLabeledLines(before, basicEntries)
+    // 内容没变化就不写入缓冲区，避免把未改动的字段标记为已修改
+    if (content !== before) buffer.customer_basic_info = content
+    // 逐条记录「原值 -> 新值」，方便面板里按标签展示
+    for (const entry of basicEntries) {
+      const oldValue = readLabeledLine(before, entry.label)
+      record(entry.label, entry.target, oldValue, String(entry.value).trim())
+    }
   }
-  // 备注：追加在原值之后（模型自己的 remark 已在 ANALYSIS_MAPPING 里写入 buffer.remark）
-  if (remarks.length) {
-    buffer.remark = appendText(current('remark'), remarks.join('\n'))
+  if (remarkEntries.length) {
+    const before = current('remark')
+    const { content } = applyLabeledLines(before, remarkEntries)
+    if (content !== before) buffer.remark = content
+    for (const entry of remarkEntries) {
+      const oldValue = readLabeledLine(before, entry.label)
+      record(entry.label, entry.target, oldValue, String(entry.value).trim())
+    }
   }
 
   // 写入编辑缓冲区，等用户点「保存」落库
@@ -634,14 +657,14 @@ function currencyOf(field) {
   return fallback == null ? '' : fallback
 }
 
-// 公司规模展示文案：区间优先，其次字典 id
+// 公司规模展示文案：优先按 company_size_id 映射字典，其次用后端返回的 company_size_name
 function companySizeLabel() {
-  const min = getFieldValue('company_size_min')
-  const max = getFieldValue('company_size_max')
-  if (min != null && min !== '' && max != null && max !== '') return `${min}-${max}`
-  if (min != null && min !== '') return `${min}人以上`
-  if (max != null && max !== '') return `${max}人以下`
-  return '—'
+  const id = normalizeId(getFieldValue('company_size_id'))
+  if (id !== '') {
+    const label = optionLabel(COMPANY_SIZE_OPTIONS, id)
+    if (label) return label
+  }
+  return getFieldValue('company_size_name') || '—'
 }
 
 /**
@@ -974,28 +997,19 @@ watch(
           </span>
         </el-descriptions-item>
         <el-descriptions-item label="公司规模">
-          <span class="cell-field" :class="{ 'is-editing': isEditing('company_size_min') || isEditing('company_size_max') }">
+          <span class="cell-field" :class="{ 'is-editing': isEditing('company_size_id') }">
             <span class="cell-static">
-              <span class="editable" @dblclick="startEdit('company_size_min', detail.company_size_min ?? '')">{{ companySizeLabel() }}</span>
+              <span class="editable" @dblclick="startEdit('company_size_id', normalizeId(detail.company_size_id))">{{ companySizeLabel() }}</span>
             </span>
-            <span v-if="isEditing('company_size_min') || isEditing('company_size_max')" class="cell-editor">
-              <div class="cell-range">
-              <el-input-number
-              v-model="editBufferMap.company_size_min"
-              :min="0"
-              :controls="false"
-              placeholder="下限"
-              class="cell-range-input"
+            <span v-if="isEditing('company_size_id')" class="cell-editor">
+              <el-select v-model="editBufferMap.company_size_id" placeholder="请选择公司规模" class="cell-select">
+              <el-option
+              v-for="opt in COMPANY_SIZE_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
               />
-              <span class="cell-range-sep">-</span>
-              <el-input-number
-              v-model="editBufferMap.company_size_max"
-              :min="0"
-              :controls="false"
-              placeholder="上限"
-              class="cell-range-input"
-              />
-              </div>
+              </el-select>
             </span>
           </span>
         </el-descriptions-item>
@@ -1214,6 +1228,19 @@ watch(
         </el-descriptions-item>
       </el-descriptions>
     </div>
+
+    <!-- 深入分析改动：按标签展示「原值 -> 新值」 -->
+    <div v-if="analysisResult.length" class="analysis-changes">
+      <div class="analysis-changes-title">深入分析改动</div>
+      <div v-for="(item, index) in analysisResult" :key="index" class="change-line">
+        <span class="change-label">{{ item.label }}</span>
+        <span class="change-arrow">-></span>
+        <span class="change-old">{{ item.oldValue || '（空）' }}</span>
+        <span class="change-arrow">-></span>
+        <span class="change-new">{{ item.newValue }}</span>
+        <span class="change-target">{{ item.target }}</span>
+      </div>
+    </div>
     <el-row :gutter="16" class="detail-modules">
       <el-col :span="12">
         <CrmCustomerContacts
@@ -1229,8 +1256,21 @@ watch(
           @view-all="goFollowUpRecords"
         />
       </el-col>
-      <el-col :span="12">
+      <el-col :span="12" class="background-check-col">
         <div class="module-placeholder">背景调查</div>
+        <div class="background-check-text">
+          <div
+            class="cell-field is-multiline"
+            :class="{ 'is-editing': isEditing('background_check') }"
+          >
+            <span class="cell-static">
+              <span class="editable editable-multiline" @dblclick="startEdit('background_check', detail.background_check)">{{ getFieldValue('background_check') || '—' }}</span>
+            </span>
+            <span v-if="isEditing('background_check')" class="cell-editor">
+              <el-input v-model="editBufferMap.background_check" type="textarea" :rows="3" resize="none" class="cell-textarea" />
+            </span>
+          </div>
+        </div>
       </el-col>
     </el-row>
     <CrmCustomerProducts
@@ -1254,6 +1294,8 @@ watch(
   background: #fff;
   display: flex;
   flex-direction: column;
+  // 全局 #app 上有 user-select: none，这里放开，页面内文本可以选中并复制
+  user-select: text;
 }
 
 .detail-header {
@@ -1322,10 +1364,10 @@ watch(
   }
 }
 
-// 多行文本字段：展示态与编辑态统一为 3 行文本框的高度（75px）
+// 多行文本字段：展示态与编辑态统一为 4 行文本框的高度（96px）
 .cell-field.is-multiline .cell-static {
-  height: 75px;
-  min-height: 75px;
+  height: 96px;
+  min-height: 96px;
   align-items: stretch;
 
   :deep(.editable) {
@@ -1358,10 +1400,10 @@ watch(
   visibility: hidden;
 }
 
-// 多行文本编辑态：固定为 3 行高度，与展示态 .editable-multiline 严格一致
+// 多行文本编辑态：固定为 4 行高度，与展示态 .editable-multiline 严格一致
 .cell-textarea :deep(.el-textarea__inner) {
-  height: 75px;
-  min-height: 75px !important;
+  height: 96px;
+  min-height: 96px !important;
   line-height: 21px;
 }
 
@@ -1384,6 +1426,58 @@ watch(
   font-size: 15px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+}
+
+.background-check-text {
+  padding: 0 16px 16px;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+// 背景调查：占满所在列（与左列模块等高），
+// 内容区随之拉伸，文本展示区撑满剩余高度
+.background-check-col {
+  display: flex;
+  flex-direction: column;
+
+  .background-check-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  // 展示态与编辑态控件撑满剩余高度
+  .cell-field {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .cell-field.is-multiline .cell-static {
+    flex: 1;
+    height: 100%;
+    min-height: 96px;
+  }
+
+  .editable-multiline {
+    flex: 1;
+    height: 100%;
+  }
+
+  // 编辑态的 textarea 撑满剩余高度
+  .cell-editor > :deep(*) {
+    height: 100%;
+  }
+
+  .cell-textarea :deep(.el-textarea__inner) {
+    height: 100%;
+    min-height: 96px;
+  }
 }
 
 .detail-actions {
@@ -1409,12 +1503,12 @@ watch(
   }
 }
 
-// 多行文本展示态：高度与编辑态的 textarea（3 行 = 75px）严格一致，
+// 多行文本展示态：高度与编辑态的 textarea（4 行 = 96px）严格一致，
 // 内容超出时在自身内部滚动，保证双击前后单元格高度不变
 .editable-multiline {
   white-space: pre-wrap;
   word-break: break-word;
-  height: 75px;
+  height: 96px;
   box-sizing: border-box;
   overflow-y: auto;
 }
@@ -1472,5 +1566,56 @@ watch(
 .cell-range-sep {
   flex-shrink: 0;
   color: var(--el-text-color-secondary);
+}
+
+// —— 深入分析改动：按标签展示「原值 -> 新值」 ——
+.analysis-changes {
+  padding: 12px 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.analysis-changes-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 8px;
+}
+
+.change-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 22px;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.change-label {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.change-arrow {
+  color: var(--el-color-primary);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.change-old {
+  color: var(--el-text-color-secondary);
+  text-decoration: line-through;
+}
+
+.change-new {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+}
+
+.change-target {
+  margin-left: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  flex-shrink: 0;
 }
 </style>

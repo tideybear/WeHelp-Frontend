@@ -43,6 +43,14 @@ export const PRIORITY_OPTIONS = [
   { label: '高', value: 3 },
 ]
 
+// 公司规模：后端字段 company_size_id / company_size_name
+export const COMPANY_SIZE_OPTIONS = [
+  { label: '小型', value: 1 },
+  { label: '中型', value: 2 },
+  { label: '大型', value: 3 },
+  { label: '特大型', value: 4 },
+]
+
 // 单页拉取上限，配合 fetchAllRecords 循环补齐
 export const FETCH_PAGE_SIZE = 500
 

@@ -39,7 +39,7 @@ function formatCurrency(val, currency = 'USD') {
 }
 
 const columns = [
-  { prop: 'customer_no', label: '序号', width: 120, align: 'center' },
+  { prop: 'company_name_en', label: '公司名称（英文）', minWidth: 180 },
   { prop: 'company_name', label: '公司名称', minWidth: 180 },
   { prop: 'short_name', label: '简称', width: 100 },
   { prop: 'status_name', label: '客户状态', width: 90, align: 'center' },

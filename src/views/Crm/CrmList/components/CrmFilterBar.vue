@@ -2,6 +2,7 @@
 import { ref, reactive } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import CrmCreateCustomerDialog from './CrmCreateCustomerDialog.vue'
+import { REGION_OPTIONS, COUNTRY_OPTIONS } from './shared'
 
 defineOptions({ name: 'CrmFilterBar' })
 
@@ -13,6 +14,8 @@ const filters = reactive({
   customer_code: '',
   customer_name: '',
   contact_person: '',
+  region_id: '',
+  country_id: '',
 })
 
 /**
@@ -42,6 +45,8 @@ function handleReset() {
   filters.customer_code = ''
   filters.customer_name = ''
   filters.contact_person = ''
+  filters.region_id = ''
+  filters.country_id = ''
   emit('reset')
 }
 
@@ -93,6 +98,38 @@ defineExpose({
             @keyup.enter="handleSearch"
           />
         </el-form-item>
+        <el-form-item label="区域">
+          <el-select
+            v-model="filters.region_id"
+            placeholder="请选择区域"
+            clearable
+            filterable
+            class="filter-select"
+          >
+            <el-option
+              v-for="opt in REGION_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="国家">
+          <el-select
+            v-model="filters.country_id"
+            placeholder="请选择国家"
+            clearable
+            filterable
+            class="filter-select"
+          >
+            <el-option
+              v-for="opt in COUNTRY_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
       <div class="filter-toolbar">
         <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -131,18 +168,22 @@ $toolbar-primary-dark-2: #337ecc;
 }
 
 .filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 12px 16px;
 }
 
 .filter-form {
-  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 16px;
   min-width: 0;
 
   :deep(.el-form-item) {
     margin-bottom: 12px;
+    margin-right: 0;
   }
 
   :deep(.el-form-item__label) {
@@ -157,11 +198,20 @@ $toolbar-primary-dark-2: #337ecc;
   :deep(.filter-input-wide) {
     width: 200px;
   }
+
+  :deep(.filter-select) {
+    width: 140px;
+  }
 }
 
 .filter-toolbar {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.filter-toolbar-extra {
+  display: flex;
   flex-shrink: 0;
 }
 </style>

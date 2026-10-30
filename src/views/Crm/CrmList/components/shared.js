@@ -315,8 +315,9 @@ export function formatDateTime(value) {
 // key_contacts ...），与客户详情页的表单字段（crm_master_data）不是一一对应。
 // 这里的规则把两边对齐：
 //
-// 1. 能对上表单字段的 → 写入对应字段（有原值时追加在原值之后，不覆盖原值）；
-// 2. 对不上表单字段的 → 按内容性质打包进「基本信息」或「备注」；
+// 1. 能对上表单字段的 → 写入对应字段（原值为空直接填入，有原值则直接替换）；
+// 2. 对不上表单字段的 → 按内容性质打包进「基本信息」或「备注」，
+//    在多行文本里按「标签」定位并替换同名行，没有同名标签才新增一行；
 // 3. 写不进去的（数量型、下拉型与原值冲突等）→ 记入备注并在结果面板里标注。
 
 /** 深入分析结果的中文字段名（与后端 ANALYSIS_FIELDS 保持一致） */
@@ -347,14 +348,15 @@ export const ANALYSIS_LABELS = {
   competitive_advantages: '竞争优势',
   key_contacts: '关键联系人',
   follow_up_strategy: '跟进策略',
+  background_check: '背景调查',
   remark: '备注',
 }
 
 /**
  * 能与表单字段对应的分析项。
  * type:
- *  - text / multiline：文本，直接追加到目标字段
- *  - website：网址，单值字段，用「、」分隔追加
+ *  - text / multiline：文本，直接写入目标字段（原值为空填入，有原值则替换）
+ *  - website：网址，单值字段，原值为空填入，有原值则替换
  *  - revenue：数量型，数值写入，单位说明打包进基本信息
  *  - enum：下拉型，用 label 反查 option.value；查不到则退回基本信息
  */
@@ -397,11 +399,20 @@ export const ANALYSIS_MAPPING = [
     fallbackKey: 'industry',
     targetLabel: '行业',
   },
+  {
+    key: 'company_size',
+    label: '企业规模',
+    target: 'company_size_id',
+    type: 'enum',
+    options: 'COMPANY_SIZE_OPTIONS',
+    targetLabel: '公司规模',
+  },
   { key: 'company_revenue', label: '年营业额', target: 'company_revenue', type: 'revenue', targetLabel: '销售额' },
   { key: 'revenue_currency', label: '营收币种', target: 'revenue_currency', type: 'currency', targetLabel: '币种' },
   { key: 'address', label: '总部地址', target: 'address', type: 'address', targetLabel: '地址' },
   { key: 'customer_needs', label: '采购需求分析', target: 'customer_needs', type: 'multiline', targetLabel: '客户需求' },
   { key: 'follow_up_strategy', label: '跟进策略', target: 'follow_up_strategy', type: 'multiline', targetLabel: '跟进策略' },
+  { key: 'background_check', label: '背景调查', target: 'background_check', type: 'multiline', targetLabel: '背景调查' },
   { key: 'remark', label: '备注', target: 'remark', type: 'multiline', targetLabel: '备注' },
 ]
 
@@ -411,7 +422,6 @@ export const BASIC_INFO_KEYS = [
   'main_products',
   'founded_year',
   'employee_count',
-  'company_size',
   'parent_company',
 ]
 
@@ -468,14 +478,68 @@ export const ANALYSIS_FALLBACK_GROUP = {
   remark: 'remark',
 }
 
-/** 文本追加：空则直接写；已有相同内容不重复追加；否则换行追加在原值之后 */
-export function appendText(original, addition) {
-  const a = original == null ? '' : String(original).trim()
-  const b = addition == null ? '' : String(addition).trim()
-  if (!b) return a
-  if (!a) return b
-  if (a.includes(b)) return a
-  return `${a}\n${b}`
+/**
+ * 在多行文本里按「标签：」定位并替换该行的内容：
+ * - 找到同标签的行 → 直接替换该行的值（不追加到末尾）；
+ * - 没找到 → 作为新行追加到末尾；
+ * - 文本为空 → 只放这一行。
+ */
+export function replaceLabeledLine(text, label, value) {
+  const content = text == null ? '' : String(text)
+  const val = value == null ? '' : String(value).trim()
+  if (!val) return content
+  const prefixes = [`${label}：`, `${label}:`]
+  const lines = content.split('\n')
+  let hit = -1
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim()
+    if (prefixes.some((p) => t.startsWith(p))) {
+      hit = i
+      break
+    }
+  }
+  const line = `${label}：${val}`
+  if (hit >= 0) {
+    lines[hit] = line
+    return lines.join('\n')
+  }
+  if (!content.trim()) return line
+  return `${content.replace(/\n+$/, '')}\n${line}`
+}
+
+/**
+ * 读取多行文本里某个「标签：」对应的值，取不到返回空串。
+ */
+export function readLabeledLine(text, label) {
+  if (text == null || text === '') return ''
+  const prefixes = [`${label}：`, `${label}:`]
+  for (const line of String(text).split('\n')) {
+    const t = line.trim()
+    for (const p of prefixes) {
+      if (t.startsWith(p)) return t.slice(p.length).trim()
+    }
+  }
+  return ''
+}
+
+/**
+ * 批量把「标签：值」写进多行文本：
+ * 已有同标签的行 → 直接替换该行；没有 → 作为新行追加到末尾。
+ * 返回写入后的文本与「实际发生变化」的条目列表。
+ */
+export function applyLabeledLines(text, entries) {
+  let content = text == null ? '' : String(text)
+  const changes = []
+  for (const entry of entries) {
+    const { label, value } = entry
+    if (value == null || String(value).trim() === '') continue
+    const before = content
+    content = replaceLabeledLine(content, label, value)
+    if (content !== before) {
+      changes.push({ label, old: before, new: content })
+    }
+  }
+  return { content, changes }
 }
 
 /** 按 label 反查下拉选项的 value */
@@ -518,11 +582,27 @@ export function extractAddress(basicInfo) {
 }
 
 /**
- * 把地址写回 customer_basic_info：移除旧的地址行，把新地址作为首行插回去。
+ * 把地址写回 customer_basic_info：
+ * - 已有地址行 → 就在原位置替换成新地址（不改变行序）；
+ * - 没有地址行 → 作为首行插入。
  */
 export function mergeAddress(basicInfo, address) {
-  const { rest } = extractAddress(basicInfo)
   const addr = address == null ? '' : String(address).trim()
-  if (!addr) return rest
+  if (!addr) return extractAddress(basicInfo).rest
+  const content = basicInfo == null ? '' : String(basicInfo)
+  const lines = content.split('\n')
+  let hit = -1
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim()
+    if (t.startsWith(ADDRESS_LINE_PREFIX) || t.startsWith('地址：')) {
+      hit = i
+      break
+    }
+  }
+  if (hit >= 0) {
+    lines[hit] = `${ADDRESS_LINE_PREFIX}${addr}`
+    return lines.join('\n').replace(/\n+$/, '')
+  }
+  const { rest } = extractAddress(content)
   return `${ADDRESS_LINE_PREFIX}${addr}\n${rest}`.replace(/\n+$/, '')
 }
