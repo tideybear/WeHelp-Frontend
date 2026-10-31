@@ -45,6 +45,7 @@ export const REGION_OPTIONS = [
   { label: '北美洲', value: 15 },
   { label: '南美洲', value: 16 },
   { label: '大洋洲', value: 17 },
+  { label: '中欧', value: 18 },
 ]
 
 /** 国家：sys_country.id */
