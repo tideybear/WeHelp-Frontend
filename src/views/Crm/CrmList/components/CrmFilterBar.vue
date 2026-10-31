@@ -16,6 +16,7 @@ const filters = reactive({
   contact_person: '',
   region_id: '',
   country_id: '',
+  is_important: '',
 })
 
 /**
@@ -47,6 +48,7 @@ function handleReset() {
   filters.contact_person = ''
   filters.region_id = ''
   filters.country_id = ''
+  filters.is_important = ''
   emit('reset')
 }
 
@@ -112,6 +114,17 @@ defineExpose({
               :label="opt.label"
               :value="opt.value"
             />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="是否重要">
+          <el-select
+            v-model="filters.is_important"
+            placeholder="请选择"
+            clearable
+            class="filter-select"
+          >
+            <el-option label="是" :value="1" />
+            <el-option label="否" :value="0" />
           </el-select>
         </el-form-item>
         <el-form-item label="国家">

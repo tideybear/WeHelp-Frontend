@@ -46,6 +46,8 @@ const columns = [
   { prop: 'source_name', label: '来源', width: 80, align: 'center' },
   { prop: 'region_name', label: '区域', width: 80 },
   { prop: 'country_name', label: '国家', width: 80 },
+  { prop: 'city', label: '城市', width: 90 },
+  { prop: 'is_important', label: '重要客户', width: 90, align: 'center' },
   { prop: 'customer_type_name', label: '客户性质', width: 90 },
   { prop: 'industry_name', label: '行业', width: 100 },
   { prop: 'company_size', label: '公司规模', width: 100, align: 'center' },
@@ -204,6 +206,11 @@ watch(
             <template v-if="col.prop === 'status_name'" #default="scope">
               <el-tag :type="getStatusTagType(scope.row.status)" size="small">
                 {{ scope.row.status_name || '—' }}
+              </el-tag>
+            </template>
+            <template v-else-if="col.prop === 'is_important'" #default="scope">
+              <el-tag :type="Number(scope.row?.is_important) === 1 ? 'danger' : 'info'" size="small">
+                {{ Number(scope.row?.is_important) === 1 ? '是' : '否' }}
               </el-tag>
             </template>
             <template v-else-if="['is_followed_up_label', 'has_visited_label'].includes(col.prop)" #default="scope">

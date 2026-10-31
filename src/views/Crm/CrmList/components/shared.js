@@ -328,6 +328,7 @@ export const ANALYSIS_LABELS = {
   short_name: '公司简称',
   company_type: '企业类型',
   website: '公司官网',
+  city: '城市',
   country: '国家/地区',
   country_cn: '国家/地区（中文）',
   region: '所属地区',
@@ -366,6 +367,7 @@ export const ANALYSIS_MAPPING = [
   { key: 'company_name_en', label: '公司英文名称', target: 'company_name_en', type: 'text', targetLabel: '英文名称' },
   { key: 'short_name', label: '公司简称', target: 'short_name', type: 'text', targetLabel: '简称' },
   { key: 'website', label: '公司官网', target: 'website', type: 'website', targetLabel: '网址' },
+  { key: 'city', label: '城市', target: 'city', type: 'text', targetLabel: '城市' },
   {
     key: 'company_type',
     label: '企业类型',

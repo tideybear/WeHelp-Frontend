@@ -85,6 +85,7 @@ const NUMBER_FIELDS = [
   'third_year_sales_potential',
   'is_followed_up',
   'has_visited',
+  'is_important',
 ]
 
 // 日期型字段：保存时需要转成 'YYYY-MM-DD'
@@ -621,6 +622,19 @@ function yesNoLabel(field, nameField) {
   return detail.value?.[nameField] || '—'
 }
 
+// 重要客户展示文案（编辑缓冲优先）
+function importantLabel() {
+  let raw
+  if (editBufferMap.value.is_important !== undefined) {
+    raw = editBufferMap.value.is_important
+  } else {
+    raw = detail.value?.is_important
+  }
+  const id = normalizeId(raw)
+  if (id === '') return '—'
+  return optionLabel(YES_NO_OPTIONS, id)
+}
+
 // 日期展示文案（编辑缓冲优先）
 function dateLabel(field, withTime = false) {
   const raw = getFieldValue(field)
@@ -954,6 +968,33 @@ watch(
               <el-select v-model="editBufferMap.country_id" placeholder="请选择国家" class="cell-select" filterable>
               <el-option
               v-for="opt in COUNTRY_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+              />
+              </el-select>
+            </span>
+          </span>
+        </el-descriptions-item>
+        <el-descriptions-item label="城市">
+          <span class="cell-field" :class="{ 'is-editing': isEditing('city') }">
+            <span class="cell-static">
+              <span class="editable" @dblclick="startEdit('city', detail.city)">{{ getFieldValue('city') || '—' }}</span>
+            </span>
+            <span v-if="isEditing('city')" class="cell-editor">
+              <el-input v-model="editBufferMap.city" />
+            </span>
+          </span>
+        </el-descriptions-item>
+        <el-descriptions-item label="重要客户">
+          <span class="cell-field" :class="{ 'is-editing': isEditing('is_important') }">
+            <span class="cell-static">
+              <span class="editable" @dblclick="startEdit('is_important', normalizeId(detail.is_important))">{{ importantLabel() }}</span>
+            </span>
+            <span v-if="isEditing('is_important')" class="cell-editor">
+              <el-select v-model="editBufferMap.is_important" placeholder="请选择" class="cell-select">
+              <el-option
+              v-for="opt in YES_NO_OPTIONS"
               :key="opt.value"
               :label="opt.label"
               :value="opt.value"
