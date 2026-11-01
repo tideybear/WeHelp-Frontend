@@ -100,7 +100,7 @@ async function fetchDataList(page = 1, size = 100, filterParams = {}) {
     // 构建查询参数
     const params = {
       page,
-      page_size: size,
+      pageSize: size,
       namespace_id: Number(ns),
       ...filterParams,
     }

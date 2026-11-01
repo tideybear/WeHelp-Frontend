@@ -89,6 +89,8 @@ export const useNamespace = defineStore('Namespace', () => {
       } else {
         currentNamespaceId.value = namespaceList.value[0].id
         saveNamespaceId(currentNamespaceId.value)
+        // 命名空间就绪后补拉菜单（此前菜单请求因缺少 namespaceId 而未发出）
+        useMenu().getMenuList()
       }
     }
   }

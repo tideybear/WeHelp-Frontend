@@ -62,7 +62,7 @@ export async function loadCustomerOptions(namespaceId) {
   if (namespaceId == null || namespaceId === '') return []
   const res = await getCrmCustomerListAPI({
     page: 1,
-    page_size: 200,
+    pageSize: 200,
     namespace_id: Number(namespaceId),
   })
   const result = res?.result ?? res

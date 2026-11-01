@@ -31,7 +31,7 @@ export const getOrderListAPI = (namespace_id, data_authorize_lv, page = 1, page_
       namespace_id: namespace_id,
       data_authorize_lv: data_authorize_lv,
       page,
-      page_size,
+      pageSize: page_size,
       data_sources: sourcesParam
     }
   })

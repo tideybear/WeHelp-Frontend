@@ -62,7 +62,7 @@ async function loadContacts() {
     const params = {
       customer_id: Number(cid),
       page: 1,
-      page_size: 100,
+      pageSize: 100,
     }
     if (props.namespaceId != null && props.namespaceId !== '') {
       params.namespace_id = Number(props.namespaceId)
