@@ -17,6 +17,16 @@ export const useMenu = defineStore('Menu', () => {
   // 加载状态
   const loading = ref(false)
 
+  // 菜单是否已完成首次加载（用于渲染层区分「无数据」与「加载中」）
+  const menuReady = ref(false)
+
+  // 已成功加载的菜单标识（namespaceId:userId），用于避免重复请求
+  const loadedKey = ref('')
+
+  // 进行中的菜单请求（同一 key 的并发调用共享同一个 Promise）
+  let inflight = null
+  let inflightKey = ''
+
   // 根据路径获取模块
   const getModuleByPath = (path, list = menuList.value) => {
     for (const item of list) {
@@ -46,30 +56,60 @@ export const useMenu = defineStore('Menu', () => {
   }
 
   // 获取菜单列表
-  const getMenuList = async () => {
-    loading.value = true
-    try {
-      const namespaceStore = useNamespace()
+  // 说明：同一 (namespaceId, userId) 只真正请求一次，
+  // 并发调用共享同一个 Promise，避免 loading 反复抖动导致的页面闪烁
+  const getMenuList = async ({ force = false } = {}) => {
+    const namespaceStore = useNamespace()
 
-      if (await namespaceStore.redirectToLoginIfNoUser()) {
-        menuList.value = []
-        return
-      }
-
-      const nsid = namespaceStore.currentNamespaceId
-      const userStore = useUserStore()
-      const uid = userStore.userInfo?.id
-
-      if (nsid == null || nsid === '' || uid == null || uid === '') {
-        menuList.value = []
-        return
-      }
-
-      const res = await getMenuListAPI(Number(nsid), Number(uid))
-      menuList.value = res.data
-    } finally {
-      loading.value = false
+    if (await namespaceStore.redirectToLoginIfNoUser()) {
+      menuList.value = []
+      menuReady.value = true
+      return
     }
+
+    const nsid = namespaceStore.currentNamespaceId
+    const userStore = useUserStore()
+    const uid = userStore.userInfo?.id
+
+    if (nsid == null || nsid === '' || uid == null || uid === '') {
+      menuList.value = []
+      menuReady.value = true
+      return
+    }
+
+    const key = `${nsid}:${uid}`
+
+    // 已有相同 key 的请求在进行中，直接复用
+    if (!force && inflight && inflightKey === key) {
+      return inflight
+    }
+
+    // 已经成功加载过相同 key，直接复用
+    if (!force && loadedKey.value === key) {
+      return
+    }
+
+    loading.value = true
+    inflightKey = key
+    const current = (async () => {
+      try {
+        const res = await getMenuListAPI(Number(nsid), Number(uid))
+        menuList.value = res.data
+        loadedKey.value = key
+      } catch (e) {
+        menuList.value = []
+      } finally {
+        loading.value = false
+        menuReady.value = true
+        if (inflight === current) {
+          inflight = null
+          inflightKey = ''
+        }
+      }
+    })()
+    inflight = current
+
+    return current
   }
 
   // 根据路由路径设置当前模块
@@ -110,6 +150,10 @@ export const useMenu = defineStore('Menu', () => {
     menuList.value = []
     currentParent.value = null
     breadcrumbHistory.value = [{ title: '首页', path: '/' }]
+    menuReady.value = false
+    loadedKey.value = ''
+    inflight = null
+    inflightKey = ''
   }
 
   return {
@@ -117,6 +161,7 @@ export const useMenu = defineStore('Menu', () => {
     currentParent,
     breadcrumbHistory,
     loading,
+    menuReady,
     getMenuList,
     getModuleByPath,
     getParentModule,

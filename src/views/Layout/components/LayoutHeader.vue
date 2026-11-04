@@ -44,13 +44,9 @@ const toggleDropdown = () => {
   isOpen.value = !isOpen.value
 }
 
-// 获取命名空间列表
+// 获取命名空间列表（store 内已做并发去重，与 Layout 的调用共享同一请求）
 onMounted(async () => {
   await namespaceStore.getNamespaceList()
-  // 确保设置了 currentNamespaceId 为第一个
-  if (!namespaceStore.currentNamespaceId && namespaceStore.namespaceList.length > 0) {
-    namespaceStore.setCurrentNamespaceId(namespaceStore.namespaceList[0].id)
-  }
 })
 </script>
 

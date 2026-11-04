@@ -61,7 +61,19 @@ export const useNamespace = defineStore('Namespace', () => {
   }
 
   // 获取命名空间菜单
-  const getNamespaceList = async () => {
+  // 说明：并发调用共享同一个 Promise，且已加载过则直接复用，避免重复请求
+  let inflight = null
+  let loaded = false
+
+  const getNamespaceList = async ({ force = false } = {}) => {
+    if (inflight) {
+      return inflight
+    }
+
+    if (!force && loaded) {
+      return
+    }
+
     if (await redirectToLoginIfNoUser()) {
       return
     }
@@ -69,30 +81,38 @@ export const useNamespace = defineStore('Namespace', () => {
     const userStore = useUserStore()
     const uid = userStore.userInfo?.id
     const params = { userid: Number(uid) }
-    const res = await getNamespaceListAPI(params)
-    namespaceList.value = res.data
-    // 根据返回数据中的 namespaceid 去重生成 ID 列表
-    const uniqueNamespaceIds = Array.from(
-      new Set((res.data || []).map((item) => item.namespaceid))
-    ).filter((id) => id !== undefined && id !== null)
-    namespaceListId.value = uniqueNamespaceIds
 
-    if (namespaceList.value.length > 0) {
-      // 优先使用保存的 namespaceId，如果不存在或不在列表中，则使用第一个
-      const storedId = getStoredNamespaceId()
-      const isValidId =
-        storedId !== undefined &&
-        namespaceList.value.some((p) => p.id === storedId)
+    inflight = (async () => {
+      try {
+        const res = await getNamespaceListAPI(params)
+        namespaceList.value = res.data
+        // 根据返回数据中的 namespaceid 去重生成 ID 列表
+        const uniqueNamespaceIds = Array.from(
+          new Set((res.data || []).map((item) => item.namespaceid))
+        ).filter((id) => id !== undefined && id !== null)
+        namespaceListId.value = uniqueNamespaceIds
 
-      if (isValidId) {
-        currentNamespaceId.value = storedId
-      } else {
-        currentNamespaceId.value = namespaceList.value[0].id
-        saveNamespaceId(currentNamespaceId.value)
-        // 命名空间就绪后补拉菜单（此前菜单请求因缺少 namespaceId 而未发出）
-        useMenu().getMenuList()
+        if (namespaceList.value.length > 0) {
+          // 优先使用保存的 namespaceId，如果不存在或不在列表中，则使用第一个
+          const storedId = getStoredNamespaceId()
+          const isValidId =
+            storedId !== undefined &&
+            namespaceList.value.some((p) => p.id === storedId)
+
+          if (isValidId) {
+            currentNamespaceId.value = storedId
+          } else {
+            currentNamespaceId.value = namespaceList.value[0].id
+            saveNamespaceId(currentNamespaceId.value)
+          }
+        }
+        loaded = true
+      } finally {
+        inflight = null
       }
-    }
+    })()
+
+    return inflight
   }
 
   // 设置 currentNamespaceId 的方法，同时保存到 localStorage
@@ -102,7 +122,7 @@ export const useNamespace = defineStore('Namespace', () => {
     // 切换 namespace 后跳转到首页并刷新菜单数据
     router.push('/')
     const menuStore = useMenu()
-    menuStore.getMenuList()
+    menuStore.getMenuList({ force: true })
   }
 
   // 清空命名空间数据
@@ -110,6 +130,7 @@ export const useNamespace = defineStore('Namespace', () => {
     namespaceList.value = []
     namespaceListId.value = []
     currentNamespaceId.value = undefined
+    loaded = false
     localStorage.removeItem('currentNamespaceId')
   }
 

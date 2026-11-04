@@ -13,9 +13,13 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/userStore'
+import { useNamespace } from '@/stores/namespaceStore'
+import { useMenu } from '@/stores/menuStore'
 
 // 初始化用户状态管理
 const userStore = useUserStore()
+const namespaceStore = useNamespace()
+const menuStore = useMenu()
 const router = useRouter()
 const route = useRoute()
 
@@ -91,6 +95,9 @@ async function doLogin() {
   submitting.value = true
   try {
     await userStore.getUserInfo({ account, password })
+    // 跳转前预取空间与菜单数据，进入 Layout 时数据已就绪，避免页面出现刷新痕迹
+    await namespaceStore.getNamespaceList()
+    await menuStore.getMenuList()
     ElMessage.success('登录成功')
     router.replace(getLoginRedirectPath())
   } catch (err) {

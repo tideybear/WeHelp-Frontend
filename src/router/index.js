@@ -10,6 +10,7 @@ import CrmContact from '@/views/Crm/CrmContact/index.vue'
 import CrmFollowUpRecords from '@/views/Crm/CrmFollowUpRecords/index.vue'
 import CrmDetail from '@/views/Crm/CrmList/components/CrmListDetail.vue'
 import ProjectList from '@/views/Project/ProjectList/index.vue'
+import FinReimbursement from '@/views/Fin/FinReimbursement/index.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -30,6 +31,8 @@ const router = createRouter({
         { path: '/website/Independent', name: 'websiteIndependent', component: Home, meta: { title: '国外站' } },
         { path: '/project', name: 'project', component: Home, meta: { title: '项目模块' } },
         { path: '/project/list', name: 'projectList', component: ProjectList, meta: { title: '项目列表' } },
+        { path: '/fin', name: 'fin', component: Home, meta: { title: '财务管理' } },
+        { path: '/fin/reimbursement', name: 'finReimbursement', component: FinReimbursement, meta: { title: '报销管理' } },
       ],
     },
     { path: '/login', name: 'login', component: Login },

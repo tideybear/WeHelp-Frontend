@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import LayoutHeader from './components/LayoutHeader.vue'
 import BreadcrumbNav from './components/BreadcrumbNav.vue'
 import { useMenu } from '@/stores/menuStore'
+import { useNamespace } from '@/stores/namespaceStore'
 
 defineOptions({
   name: 'LayoutIndex',
@@ -12,6 +13,7 @@ defineOptions({
 const route = useRoute()
 const router = useRouter()
 const menuStore = useMenu()
+const namespaceStore = useNamespace()
 
 // 菜单是否已加载完成
 const menuLoaded = ref(false)
@@ -55,7 +57,10 @@ watch(
 )
 
 // 加载菜单数据完成后，再设置面包屑
+// 说明：这里统一编排「空间 → 菜单」的加载顺序，保证进入 Layout 时数据已就绪，
+// 避免子组件各自请求导致的重复请求与页面闪烁
 onMounted(async () => {
+  await namespaceStore.getNamespaceList()
   await menuStore.getMenuList()
   menuLoaded.value = true
   buildBreadcrumbFromRoute(route.path)

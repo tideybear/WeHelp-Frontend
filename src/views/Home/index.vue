@@ -5,7 +5,6 @@ import ModuleGrid from './components/ModuleGrid.vue'
 import WelcomeBanner from './components/WelcomeBanner.vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import { useMenu } from '@/stores/menuStore'
-import { Loading } from '@element-plus/icons-vue'
 
 defineOptions({
   name: 'HomeIndex',
@@ -21,8 +20,13 @@ const currentModules = computed(() => menuStore.menuList || [])
 // 当前查看的父模块（用于返回）
 const currentParent = computed(() => menuStore.currentParent)
 
-// 加载状态
-const loading = computed(() => menuStore.loading)
+// 菜单是否已就绪（区分「加载中」与「已加载但为空」）
+const menuReady = computed(() => menuStore.menuReady)
+
+// 展示中的模块：下钻时取父模块的子模块，否则取顶层菜单
+const visibleModules = computed(() =>
+  currentParent.value ? currentParent.value.children || [] : currentModules.value
+)
 
 // 根据路由更新状态
 function updateByRoute() {
@@ -49,39 +53,37 @@ function handleModuleClick(module) {
   }
 }
 
-// 获取菜单列表
-onMounted(async () => {
-  await menuStore.getMenuList()
+// 菜单数据由 Layout 统一加载，这里只同步一次当前路由对应的模块状态
+onMounted(() => {
   updateByRoute()
 })
 </script>
 
 <template>
   <div class="home-container">
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <el-icon class="loading-icon" :size="40"><Loading /></el-icon>
-      <span>加载中...</span>
-    </div>
+    <!-- 欢迎横幅（常驻，不随菜单加载变化） -->
+    <WelcomeBanner />
 
-    <template v-else>
-      <!-- 欢迎横幅 -->
-      <WelcomeBanner />
-
-      <!-- 主内容区 -->
-      <div class="home-content">
-        <!-- 左侧模块列表 -->
-        <div class="module-section">
-          <ModuleGrid 
-            :modules="currentParent ? currentParent.children : currentModules" 
-            @module-click="handleModuleClick" 
-          />
+    <!-- 主内容区 -->
+    <div class="home-content">
+      <!-- 左侧模块列表 -->
+      <div class="module-section">
+        <!-- 菜单加载中：展示骨架占位，避免整块卸载重挂造成闪烁 -->
+        <div v-if="!menuReady" class="module-skeleton">
+          <div v-for="i in 4" :key="i" class="skeleton-card"></div>
         </div>
 
-        <!-- 右侧动态栏 -->
-        <ActivityPanel />
+        <!-- 菜单已就绪：原地渲染，数据到达时不发生结构切换 -->
+        <ModuleGrid
+          v-else
+          :modules="visibleModules"
+          @module-click="handleModuleClick"
+        />
       </div>
-    </template>
+
+      <!-- 右侧动态栏 -->
+      <ActivityPanel />
+    </div>
   </div>
 </template>
 
@@ -92,27 +94,28 @@ onMounted(async () => {
   background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
 }
 
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  gap: 16px;
-  color: #909399;
-  font-size: 16px;
+// 菜单骨架屏：占位卡片与真实卡片尺寸一致，数据到达后原地替换
+.module-skeleton {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
 
-  .loading-icon {
-    animation: rotate 1s linear infinite;
+  .skeleton-card {
+    height: 190px;
+    border-radius: 12px;
+    border: 1px solid #ebeef5;
+    background: linear-gradient(90deg, #f5f7fa 25%, #fafbfc 37%, #f5f7fa 63%);
+    background-size: 400% 100%;
+    animation: skeleton-loading 1.4s ease infinite;
   }
 }
 
-@keyframes rotate {
-  from {
-    transform: rotate(0deg);
+@keyframes skeleton-loading {
+  0% {
+    background-position: 100% 50%;
   }
-  to {
-    transform: rotate(360deg);
+  100% {
+    background-position: 0 50%;
   }
 }
 
