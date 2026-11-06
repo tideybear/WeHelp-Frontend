@@ -1,45 +1,71 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { createFinReimbursementAPI } from '@/apis/fin'
 import { useNamespace } from '@/stores/namespaceStore'
+import { useUserStore } from '@/stores/userStore'
+import FinInvoiceDialog from './FinInvoiceDialog.vue'
 
 defineOptions({ name: 'FinReimbursementCreateDialog' })
 
 const emit = defineEmits(['success'])
 
 const namespaceStore = useNamespace()
+const userStore = useUserStore()
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref(null)
+const invoiceDialogRef = ref(null)
 
 const EXPENSE_TYPE_OPTIONS = ['交通', '餐饮', '住宿', '办公用品', '差旅', '招待', '维修', '活动物料', '其他']
-const INVOICE_TYPE_OPTIONS = ['增值税专票', '普票', '电子票', '无票']
 
 const emptyForm = () => ({
   applicant: '',
   applicant_dept: '',
-  apply_date: '',
+  apply_date: today(),
   expense_date: '',
   expense_type: '',
   expense_amount: '',
   expense_currency: 'CNY',
   expense_desc: '',
   expense_remark: '',
-  invoice_type: '',
-  invoice_no: '',
-  invoice_code: '',
-  invoice_date: '',
-  is_invoice_received: false,
-  related_flow_no: '',
+  invoices: [],
   remark: '',
 })
+
+// 当前日期 YYYY-MM-DD
+function today() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// 申请人下拉选项（来自 userStore.userList）
+const applicantOptions = computed(() =>
+  (userStore.userList || []).map((item) => ({
+    id: item.id,
+    name: item.full_name_en ??item.full_name ?? item.name ?? item.account ?? `用户 ${item.id}`,
+    dept: item.department_code ?? item.department ?? item.dept ?? item.dept_name ?? '',
+  })),
+)
+
+function handleApplicantChange(id) {
+  const user = applicantOptions.value.find((item) => String(item.id) === String(id))
+  if (!user) {
+    form.value.applicant = ''
+    form.value.applicant_dept = ''
+    return
+  }
+  // applicant 与 created_by 均写入 user_id
+  form.value.applicant = String(user.id)
+  form.value.applicant_dept = user.dept || ''
+}
 
 const form = ref(emptyForm())
 
 const rules = {
-  applicant: [{ required: true, message: '申请人不能为空', trigger: 'blur' }],
+  applicant: [{ required: true, message: '申请人不能为空', trigger: 'change' }],
   apply_date: [{ required: true, message: '申请日期不能为空', trigger: 'change' }],
   expense_date: [{ required: true, message: '费用日期不能为空', trigger: 'change' }],
   expense_type: [{ required: true, message: '费用类型不能为空', trigger: 'change' }],
@@ -49,6 +75,19 @@ const rules = {
 function open() {
   form.value = emptyForm()
   dialogVisible.value = true
+  loadApplicantOptions()
+}
+
+// 拉取当前空间的用户列表（userStore 中为空时）
+async function loadApplicantOptions() {
+  const ns = namespaceStore.currentNamespaceId
+  if (ns == null || ns === '') return
+  if ((userStore.userList || []).length > 0) return
+  try {
+    await userStore.fetchUserList(Number(ns))
+  } catch (e) {
+    console.error('获取用户列表失败:', e)
+  }
 }
 
 async function handleSubmit() {
@@ -71,6 +110,7 @@ async function handleSubmit() {
     const res = await createFinReimbursementAPI({
       namespace_id: Number(ns),
       applicant: f.applicant,
+      created_by: f.applicant,
       applicant_dept: f.applicant_dept,
       apply_date: f.apply_date,
       expense_date: f.expense_date,
@@ -79,12 +119,19 @@ async function handleSubmit() {
       expense_currency: f.expense_currency,
       expense_desc: f.expense_desc,
       expense_remark: f.expense_remark,
-      invoice_type: f.invoice_type,
-      invoice_no: f.invoice_no,
-      invoice_code: f.invoice_code,
-      invoice_date: f.invoice_date,
-      is_invoice_received: f.is_invoice_received ? 1 : 0,
-      related_flow_no: f.related_flow_no,
+      invoices: f.invoices.map((item) => ({
+        invoice_type: item.invoice_type,
+        invoice_no: item.invoice_no,
+        invoice_code: item.invoice_code,
+        invoice_date: item.invoice_date,
+        invoice_amount: item.invoice_amount,
+        tax_rate: item.tax_rate,
+        tax_amount: item.tax_amount,
+        amount_without_tax: item.amount_without_tax,
+        is_invoice_received: item.is_invoice_received ? 1 : 0,
+        attachment_ids: item.attachment_ids,
+        remark: item.remark,
+      })),
       remark: f.remark,
     })
     if (res && res.success === false) {
@@ -106,6 +153,15 @@ function handleClosed() {
   formRef.value?.clearValidate?.()
 }
 
+// ---- 发票弹窗 ----
+function handleOpenInvoiceDialog() {
+  invoiceDialogRef.value?.open(form.value.invoices)
+}
+
+function handleInvoicesConfirm(list) {
+  form.value.invoices = list
+}
+
 defineExpose({ open })
 </script>
 
@@ -121,7 +177,21 @@ defineExpose({ open })
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item label="申请人" prop="applicant">
-            <el-input v-model="form.applicant" placeholder="申请人姓名" />
+            <el-select
+              v-model="form.applicant"
+              placeholder="请选择申请人"
+              filterable
+              clearable
+              style="width: 100%"
+              @change="handleApplicantChange"
+            >
+              <el-option
+                v-for="item in applicantOptions"
+                :key="item.id"
+                :label="item.name"
+                :value="String(item.id)"
+              />
+            </el-select>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -139,6 +209,7 @@ defineExpose({ open })
               type="date"
               placeholder="选择日期"
               value-format="YYYY-MM-DD"
+              disabled
               style="width: 100%"
             />
           </el-form-item>
@@ -186,47 +257,10 @@ defineExpose({ open })
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="发票类型">
-            <el-select v-model="form.invoice_type" placeholder="请选择" clearable style="width: 100%">
-              <el-option
-                v-for="item in INVOICE_TYPE_OPTIONS"
-                :key="item"
-                :label="item"
-                :value="item"
-              />
-            </el-select>
-          </el-form-item>
-        </el-col>
-      </el-row>
-
-      <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="发票号码">
-            <el-input v-model="form.invoice_no" placeholder="发票号码" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="发票代码">
-            <el-input v-model="form.invoice_code" placeholder="发票代码" />
-          </el-form-item>
-        </el-col>
-      </el-row>
-
-      <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="发票日期">
-            <el-date-picker
-              v-model="form.invoice_date"
-              type="date"
-              placeholder="选择日期"
-              value-format="YYYY-MM-DD"
-              style="width: 100%"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="已收发票">
-            <el-switch v-model="form.is_invoice_received" />
+          <el-form-item label="发票">
+            <el-button type="primary" plain @click="handleOpenInvoiceDialog">
+              发票信息（{{ form.invoices.length }}）
+            </el-button>
           </el-form-item>
         </el-col>
       </el-row>
@@ -239,18 +273,9 @@ defineExpose({ open })
         <el-input v-model="form.expense_remark" type="textarea" :rows="2" placeholder="费用备注" />
       </el-form-item>
 
-      <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="关联流水号">
-            <el-input v-model="form.related_flow_no" placeholder="关联流水号" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="备注">
-            <el-input v-model="form.remark" placeholder="备注" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+      <el-form-item label="备注">
+        <el-input v-model="form.remark" placeholder="备注" />
+      </el-form-item>
     </el-form>
 
     <template #footer>
@@ -258,4 +283,9 @@ defineExpose({ open })
       <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
     </template>
   </el-dialog>
+
+  <FinInvoiceDialog
+    ref="invoiceDialogRef"
+    @confirm="handleInvoicesConfirm"
+  />
 </template>

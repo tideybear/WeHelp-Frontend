@@ -17,7 +17,6 @@ const emptyFilters = () => ({
   expense_type: '',
   approval_status: '',
   payment_status: '',
-  related_flow_no: '',
   expense_date_from: '',
   expense_date_to: '',
 })
@@ -68,15 +67,12 @@ const columns = [
   { prop: 'expense_type', label: '费用类型', width: 100, align: 'center' },
   { prop: 'expense_amount', label: '费用金额', width: 120, align: 'right', slot: 'amount' },
   { prop: 'expense_desc', label: '费用说明', minWidth: 180, tooltip: true },
-  { prop: 'invoice_type', label: '发票类型', width: 100, align: 'center' },
-  { prop: 'invoice_no', label: '发票号码', width: 140 },
-  { prop: 'approval_status', label: '审批状态', width: 100, align: 'center', slot: 'approval' },
-  { prop: 'approver', label: '审批人', width: 100, align: 'center' },
-  { prop: 'approval_time', label: '审批时间', width: 150, align: 'center', slot: 'datetime' },
   { prop: 'payment_status', label: '支付状态', width: 100, align: 'center', slot: 'payment' },
   { prop: 'payment_method', label: '支付方式', width: 100, align: 'center' },
   { prop: 'payment_time', label: '支付时间', width: 150, align: 'center', slot: 'datetime' },
-  { prop: 'related_flow_no', label: '关联流水号', width: 150 },
+  { prop: 'approval_status', label: '审批状态', width: 100, align: 'center', slot: 'approval' },
+  { prop: 'approver', label: '审批人', width: 100, align: 'center' },
+  { prop: 'approval_time', label: '审批时间', width: 150, align: 'center', slot: 'datetime' },
   { prop: 'remark', label: '备注', minWidth: 150, tooltip: true },
 ]
 
@@ -257,15 +253,6 @@ watch(
                   :value="item"
                 />
               </el-select>
-            </el-form-item>
-            <el-form-item label="关联流水号">
-              <el-input
-                v-model="filters.related_flow_no"
-                placeholder="精确匹配"
-                clearable
-                @keyup.enter="handleSearch"
-                @clear="handleSearch"
-              />
             </el-form-item>
             <el-form-item label="费用日期起">
               <el-date-picker

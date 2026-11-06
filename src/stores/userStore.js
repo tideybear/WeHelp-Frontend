@@ -22,8 +22,9 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const fetchUserList = async (namespace_id) => {
+    console.log(namespace_id)
     const res = await getUserListAPI({ namespace_id })
-    userList.value = (res?.data || []).filter((u) => Number(u.id) !== 1)
+    userList.value = (res?.data || []).filter((u) => Number(u.id) !== 0)
   }
 
   const clearUserInfo = () => {
