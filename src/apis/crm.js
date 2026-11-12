@@ -1,4 +1,5 @@
 import request from '@/utils/http'
+import { useUserStore } from '@/stores/userStore'
 
 /** 客户列表 */
 export const getCrmCustomerListAPI = (params) => {
@@ -164,10 +165,13 @@ export const deleteCrmCustomerProductsAPI = (id) => {
 
 /** 客户深入分析：后端需调用大模型并抓取官网，耗时较长，单独放宽超时 */
 export const deepAnalysisAPI = (data, timeout = 180000) => {
+  // 深入分析需要透传当前用户的 ai_use_key（后端用它作为内部调用凭证）
+  const aiUseKey = useUserStore().userInfo?.ai_use_key
   return request({
     url: `/crm/deep-analysis`,
     method: 'POST',
     data: { data: data ?? {} },
+    headers: aiUseKey ? { 'X-Internal-Key': aiUseKey } : undefined,
     timeout,
   })
 }

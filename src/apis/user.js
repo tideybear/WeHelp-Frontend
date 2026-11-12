@@ -18,3 +18,12 @@ export const getUserListAPI = ({ namespace_id }) => {
     params: { namespace_id },
   })
 }
+
+/** 根据 id 获取用户详情 */
+export const getUserDetailAPI = ({ id }) => {
+  return request({
+    url: '/user/detail',
+    method: 'GET',
+    params: { id },
+  })
+}

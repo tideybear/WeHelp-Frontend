@@ -97,6 +97,8 @@ async function doLogin() {
     await userStore.getUserInfo({ account, password })
     // 跳转前预取空间与菜单数据，进入 Layout 时数据已就绪，避免页面出现刷新痕迹
     await namespaceStore.getNamespaceList()
+    // 预取当前空间的成员列表（申请人下拉等场景直接可用）
+    await userStore.fetchUserList(namespaceStore.currentNamespaceId)
     await menuStore.getMenuList()
     ElMessage.success('登录成功')
     router.replace(getLoginRedirectPath())

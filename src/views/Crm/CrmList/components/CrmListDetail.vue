@@ -174,6 +174,24 @@ async function handleDeepAnalysis() {
   if (analyzing.value) return
   analyzing.value = true
 
+  // 整段逻辑包在 try 内：保证任何异常（含打包 payload 阶段）都能走到 finally，
+  // 否则 analyzing 会一直为 true，按钮永久处于禁用态
+  try {
+    return await doDeepAnalysis()
+  } catch (e) {
+    // 错误提示统一由 src/utils/http.js 的响应拦截器弹出，这里只记录日志
+    console.error('[深入分析] 调用深入分析接口失败:', e)
+    return null
+  } finally {
+    analyzing.value = false
+  }
+}
+
+/**
+ * 深入分析的实际执行逻辑：打包 payload 并调用接口。
+ * 异常统一向上抛给 handleDeepAnalysis，由它负责提示与复位按钮状态。
+ */
+async function doDeepAnalysis() {
   const customerId = detail.value?.id ?? recordId.value
 
   // 取字段值（优先使用编辑缓冲区的值，否则使用原始值）
@@ -237,25 +255,14 @@ async function handleDeepAnalysis() {
   console.log('[深入分析] 客户数据打包结果:', JSON.stringify(payload, null, 2))
 
   // 调用深入分析接口（后端耗时较长，超时放宽到 180s）
-  try {
-    const res = await deepAnalysisAPI(payload, 180000)
-    console.log('[深入分析] 接口返回结果:', res)
-    const result = res?.result ?? res ?? {}
-    const mapped = applyAnalysisResult(result)
-    analysisResult.value = mapped
-    ElMessage.success('深入分析完成')
-    return res
-  } catch (e) {
-    console.error('[深入分析] 调用深入分析接口失败:', e)
-    if (e?.code === 'ECONNABORTED') {
-      ElMessage.error('深入分析超时，请稍后重试')
-    } else {
-      ElMessage.error(e?.response?.data?.message || e?.response?.data?.msg || '深入分析失败')
-    }
-    return null
-  } finally {
-    analyzing.value = false
-  }
+  // 异常向上抛给 handleDeepAnalysis，统一在那里提示并复位按钮状态
+  const res = await deepAnalysisAPI(payload, 180000)
+  console.log('[深入分析] 接口返回结果:', res)
+  const result = res?.result ?? res ?? {}
+  const mapped = applyAnalysisResult(result)
+  analysisResult.value = mapped
+  ElMessage.success('深入分析完成')
+  return res
 }
 
 /**
