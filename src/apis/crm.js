@@ -173,5 +173,7 @@ export const deepAnalysisAPI = (data, timeout = 180000) => {
     data: { data: data ?? {} },
     headers: aiUseKey ? { 'X-Internal-Key': aiUseKey } : undefined,
     timeout,
+    // 该接口用 ai_use_key 单独鉴权，401 属于业务错误，不能触发全局登出
+    skipAuthLogout: true,
   })
 }

@@ -37,7 +37,8 @@ httpInstance.interceptors.response.use(
       e.message ??
       '网络异常，请稍后重试'
     ElMessage.warning(msg)
-    if (e.response?.status === 401) {
+    // 业务型接口（如深入分析）用独立凭证鉴权，其 401 不代表登录态失效，不做全局登出
+    if (e.response?.status === 401 && !e.config?.skipAuthLogout) {
       userStore.clearUserInfo()
       router.push('/login')
     }
